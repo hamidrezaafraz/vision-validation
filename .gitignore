@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+duplicate.ipynb
+semantic_search_cli.py
+todo.md
+*.ipynb
+*/Data
+*/results
+image.png
+results
+emotion
+emotion/*
+./emotion
+.pytest_cache

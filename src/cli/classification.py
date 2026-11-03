@@ -1,0 +1,86 @@
+import argparse
+from dataclasses import MISSING, dataclass, field, fields
+from typing import ClassVar
+
+from src.utils.dataset import ImageClassificationDataset
+from src.exact_duplicates import verify_exact_duplicates, verify_strict_duplicates
+from src.near_duplicates import verify_near_duplicates
+
+def arg(help: str, group: str, default=MISSING, choices=None):
+    """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
+    return field(default=default, metadata={"help": help, "group": group, "choices": choices})
+
+
+@dataclass
+class ClassificationArgs:
+    """
+    Options shared by every task (cls, seg, ...) for validating its dataset.
+    Each field becomes a --<field name> flag in the argument group named in its metadata.
+    bool fields become store_true flags.
+    example:
+
+        parser = argparse.ArgumentParser(parents=[ClassificationArgs.get_parser()])
+        cls_args = ClassificationArgs.from_namespace(parser.parse_args())
+
+    """
+    GROUPS: ClassVar[dict[str, str]] = {
+        "Data": "Dataset-related options",
+        "Validation": "Dataset validation steps",
+    }
+
+    datadir: str = arg("Root directory of the dataset", "Data")
+    resultdir: str = arg("Root directory of the results", "Data")
+    keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Data", default=False)
+    verify_exact_duplicates: bool = arg("Group images with identical file hashes", "Validation", default=False)
+    verify_strict_duplicates: bool = arg("Byte-compare grouped images and split groups that are not identical", "Validation", default=False)
+    
+    verify_near_duplicates: bool = arg("Group images with perceptual hashes within a Hamming distance threshold", "Validation", default=False)
+    perceptual_hash: str = arg("Perceptual hash function to use ('phash', 'average_hash', 'dhash', 'whash')", "Validation", default='phash', choices=['phash', 'average_hash', 'dhash', 'whash'])
+    hamming_threshold: int = arg("Hamming distance threshold for perceptual hash comparison", "Validation", default=1)
+    
+    restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
+
+    @classmethod
+    def get_parser(cls) -> argparse.ArgumentParser:
+        """Builds a parent parser (add_help=False) with one argument group per entry in GROUPS."""
+        parser = argparse.ArgumentParser(add_help=False)
+        groups = {name: parser.add_argument_group(name, description) for name, description in cls.GROUPS.items()}
+        for f in fields(cls):
+            kwargs = {"help": f.metadata["help"]}
+            if f.type is bool:
+                kwargs["action"] = "store_true"
+            elif f.default is MISSING:
+                kwargs.update(type=f.type, required=True)
+            else:
+                kwargs.update(type=f.type, default=f.default)
+            groups[f.metadata["group"]].add_argument(f"--{f.name}", **kwargs)
+        return parser
+
+    @classmethod
+    def from_namespace(cls, args: argparse.Namespace) -> "ClassificationArgs":
+        """Picks this class's fields out of a parsed namespace, ignoring extras like `command`."""
+        return cls(**{f.name: getattr(args, f.name) for f in fields(cls)})
+
+
+def classification_cli(args: argparse.Namespace):
+    """CLI for classification tasks."""
+    cls_args = ClassificationArgs.from_namespace(args)
+    
+    print(f"Validating dataset in \"{cls_args.datadir}\"")
+    print(f"Storing results in \"{cls_args.resultdir}\"")
+    
+    dataset = ImageClassificationDataset(cls_args.datadir, cls_args.resultdir)
+    if cls_args.restart:
+        dataset.restart()
+    if cls_args.verify_exact_duplicates:
+        verify_exact_duplicates(dataset)
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group()
+    if cls_args.verify_strict_duplicates:
+        verify_strict_duplicates(dataset)
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group()
+    if cls_args.verify_near_duplicates:
+        verify_near_duplicates(dataset, hash_name=cls_args.perceptual_hash, threshold=cls_args.hamming_threshold)
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group()
+    
+    
+
