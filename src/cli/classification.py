@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from src.utils.dataset import ImageClassificationDataset
 from src.exact_duplicates import verify_exact_duplicates, verify_strict_duplicates
-from src.near_duplicates import verify_near_duplicates
+from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
 
 def arg(help: str, group: str, default=MISSING, choices=None):
     """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
@@ -26,19 +26,30 @@ class ClassificationArgs:
     GROUPS: ClassVar[dict[str, str]] = {
         "Data": "Dataset-related options",
         "Validation": "Dataset validation steps",
+        "Exact hash duplicates": "Exact hash duplicate detection",
+        "Exact byte-level duplicates": "Exact byte-level duplicate detection",
+        "Near duplicates": "Near duplicate detection using perceptual hashes",
+        "Semantic embeddings": "Semantic embedding detection using pre-trained models",
     }
 
     datadir: str = arg("Root directory of the dataset", "Data")
     resultdir: str = arg("Root directory of the results", "Data")
-    keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Data", default=False)
-    verify_exact_duplicates: bool = arg("Group images with identical file hashes", "Validation", default=False)
-    verify_strict_duplicates: bool = arg("Byte-compare grouped images and split groups that are not identical", "Validation", default=False)
     
-    verify_near_duplicates: bool = arg("Group images with perceptual hashes within a Hamming distance threshold", "Validation", default=False)
-    perceptual_hash: str = arg("Perceptual hash function to use ('phash', 'average_hash', 'dhash', 'whash')", "Validation", default='phash', choices=['phash', 'average_hash', 'dhash', 'whash'])
-    hamming_threshold: int = arg("Hamming distance threshold for perceptual hash comparison", "Validation", default=1)
-    
+    keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Validation", default=False)
     restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
+    
+    verify_exact_duplicates: bool = arg("Group images with identical file hashes", "Exact hash duplicates", default=False)
+    verify_strict_duplicates: bool = arg("Byte-compare grouped images and split groups that are not identical", "Exact byte-level duplicates", default=False)
+    
+    verify_near_duplicates: bool = arg("Group images with perceptual hashes within a Hamming distance threshold", "Near duplicates", default=False)
+    perceptual_hash: str = arg("Perceptual hash function to use ('phash', 'average_hash', 'dhash', 'whash')", "Near duplicates", default='phash', choices=['phash', 'average_hash', 'dhash', 'whash'])
+    hamming_threshold: int = arg("Hamming distance threshold for perceptual hash comparison", "Near duplicates", default=1)
+    
+    verify_near_embeddings: bool = arg("Group images with embeddings within a cosine similarity threshold", "Semantic embeddings", default=False)
+    embedding_model_name: str = arg("Name of the model to use for embedding generation", "Semantic embeddings", default='alexnet', choices=['alexnet', 'resnet50'])
+    embedding_threshold: float = arg("Cosine similarity threshold for embedding comparison", "Semantic embeddings", default=0.95)
+    embedding_batch_size: int = arg("Batch size for embedding generation", "Semantic embeddings", default=128)
+
 
     @classmethod
     def get_parser(cls) -> argparse.ArgumentParser:
@@ -74,13 +85,16 @@ def classification_cli(args: argparse.Namespace):
         dataset.restart()
     if cls_args.verify_exact_duplicates:
         verify_exact_duplicates(dataset)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group()
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("exact hash duplicates")
     if cls_args.verify_strict_duplicates:
         verify_strict_duplicates(dataset)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group()
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("exact byte-level duplicates")
     if cls_args.verify_near_duplicates:
         verify_near_duplicates(dataset, hash_name=cls_args.perceptual_hash, threshold=cls_args.hamming_threshold)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group()
-    
-    
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("near duplicates")
+    if cls_args.verify_near_embeddings:
+        verify_near_embeddings(dataset, model_name=cls_args.embedding_model_name, threshold=cls_args.embedding_threshold, batch_size=cls_args.embedding_batch_size)
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("semantic embeddings")
+
+
 
