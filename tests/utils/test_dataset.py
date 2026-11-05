@@ -72,6 +72,14 @@ class TestGrouping:
         dataset.group([[2, 3]], column="split_group")  # Happy + Sad
         assert list(dataset._manifest["label_conflict"]) == [False, False, True, True]
 
+    def test_keep_first_in_split_group_skips_label_conflicts(self, dataset):
+        dataset.group([[0, 1]], column="split_group")  # both Happy: no conflict
+        dataset.group([[2, 3]], column="split_group")  # Happy + Sad: conflict
+        dataset.keep_first_in_split_group(reason="emb")
+        m = dataset._manifest
+        assert list(m["action"]) == ["keep", "drop", "", ""]
+        assert list(m["reason"]) == ["", "emb", "", ""]
+
     def test_keep_first_in_group(self, dataset):
         dataset.group([[0, 1]])
         dataset.keep_first_in_group(reason="exact dup")

@@ -83,29 +83,46 @@ class ImageClassificationDataset(TorchDataset):
             return np.load(hashes_path)
         return None
         
-    def keep_first_in_group(self, reason="duplicate"):
+    def keep_first_in_group(self, reason="duplicate", column='group_id'):
         """
         Looks for images sharing a UUID group_id. Sets the first one to 'keep' 
         and the rest to 'drop' with the provided reason.
         """
-        has_reason = self._manifest['reason'] != ""
+        eligable = (self._manifest['action'] != 'drop') & ~self._manifest['label_conflict']
+        is_duplicate = self._manifest.duplicated(subset=[column], keep='first')
         
-        is_duplicate = self._manifest.duplicated(subset=['group_id'], keep='first')
         
-        first_in_group = ~is_duplicate
+        self._manifest.loc[~is_duplicate & eligable, 'action'] = 'keep'
+        self._manifest.loc[is_duplicate & eligable, 'action'] = 'drop'
+        self._manifest.loc[is_duplicate & eligable, 'reason'] = reason
         
-        # The subsequent items in a valid group
-        rest_in_group = is_duplicate
+        conflicting = self._manifest['label_conflict'] & (self._manifest['action'] != 'drop')
+        self._manifest.loc[conflicting, 'action'] = 'drop'
+        self._manifest.loc[conflicting, 'reason'] = 'Conflicting labels in group'
         
-        # 4. Update the manifest using .loc
-        self._manifest.loc[first_in_group, 'action'] = 'keep'
-        self._manifest.loc[rest_in_group, 'action'] = 'drop'
-        rest_in_group &= ~has_reason  # Only mark as drop if no reason is already set
-        self._manifest.loc[rest_in_group, 'reason'] = reason
-        
-        # 5. Save changes
         self.save_manifest()
         
+    def keep_first_in_split_group(self, reason="split group duplicate"):
+        """
+        Within each split_group, keeps the first non-dropped row and drops the rest,
+        but only for groups without a label conflict. Rows in conflicting groups are
+        left untouched, so different-label items (e.g. same person, other expression) survive.
+        """
+        eligible = (self._manifest['action'] != 'drop') & ~self._manifest['label_conflict']
+        is_duplicate = (
+            self._manifest[eligible]
+            .duplicated(subset=['split_group'], keep='first')
+            .reindex(self._manifest.index, fill_value=False)
+            .astype(bool)
+        )
+        first = eligible & ~is_duplicate
+
+        self._manifest.loc[first & (self._manifest['action'] == ''), 'action'] = 'keep'
+        self._manifest.loc[is_duplicate, 'action'] = 'drop'
+        no_reason = self._manifest['reason'] == ''
+        self._manifest.loc[is_duplicate & no_reason, 'reason'] = reason
+        self.save_manifest()
+
     def update_group_ids(self, indices, assigned_group_ids):
         for index, group_id in zip(indices, assigned_group_ids):
             self._manifest.loc[index, 'group_id'] = group_id
