@@ -4,6 +4,8 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn.functional as F
+from facenet_pytorch import InceptionResnetV1
+from torchvision.transforms import transforms
 
 def similar_pairs(X, thr, chunk=2048, device="cpu"):
     """X: (N,D) L2-normalised. Returns (i,j), i<j, with cosine >= thr."""
@@ -25,6 +27,8 @@ def get_transform(model_name):
         return models.AlexNet_Weights.DEFAULT.transforms()
     elif model_name == "resnet18":
         return models.ResNet18_Weights.DEFAULT.transforms()
+    elif model_name in ["facenet-vggface2", "facenet-casia-webface"]:
+        return transforms.Compose([transforms.Resize((160, 160)), transforms.ToTensor()])
     raise ValueError(f"Model {model_name} not supported.")
     
 
@@ -47,6 +51,10 @@ def get_model(model_name:str = "alexnet", device:str = "cpu"):
     elif model_name == "resnet18":
         w = models.ResNet18_Weights.DEFAULT
         model = models.resnet18(weights=w)
+    elif model_name == "facenet-vggface2":
+        model = InceptionResnetV1(pretrained='vggface2', classify=False, device=device)
+    elif model_name == "facenet-casia-webface":
+        model = InceptionResnetV1(pretrained='casia-webface', classify=False, device=device)
     else:
         raise ValueError(f"Model {model_name} not supported.")
 

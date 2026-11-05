@@ -20,3 +20,4 @@ emotion
 emotion/*
 ./emotion
 .pytest_cache
+notebooks
