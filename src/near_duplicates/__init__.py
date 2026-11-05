@@ -25,15 +25,26 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
     - None
     """
     
+    
+    
+    
+    
     device = get_device()
 
     model = get_model(model_name=model_name, device=device)
     transform = get_transform(model_name=model_name)
     dataset.dataset.transform = transform
-    sub_ds = Subset(dataset, dataset.df.index)
+    # get all the embeddings for the dataset using the specified model
     
-    emb = get_embeddings(model, sub_ds, batch_size=batch_size, device=device)
+    # sub_ds = Subset(dataset, dataset.df.index)
     
+    emb = dataset.load_embeddings(model_name=model_name)
+    if emb is None:
+        emb = get_embeddings(model, dataset, batch_size=batch_size, device=device)
+        dataset.save_embeddings(emb, model_name=model_name)
+    
+    emb = emb[dataset.df.index]  # Ensure embeddings are in the same order as the dataset
+    emb = torch.tensor(emb)
     pairs = similar_pairs(emb, thr=threshold, device=device)
 
     if len(pairs) > 0:
@@ -59,7 +70,12 @@ def verify_near_duplicates(dataset: ImageClassificationDataset, hash_name='phash
     - None
     """
     # Compute perceptual hashes for all images in the dataset
-    H = get_perceptual_hashes(dataset.df['path'], hash_name)
+    H = dataset.load_perceptual_hashes(hash_name=hash_name)
+    if H is None:
+        H = get_perceptual_hashes(dataset._manifest['path'], hash_name)
+        dataset.save_perceptual_hashes(H, hash_name=hash_name)
+    
+    H = H[dataset.df.index]  # Ensure hashes are in the same order as the dataset
 
     # Find pairs of images with Hamming distance less than the threshold
     pairs = hamming_pairs(H, threshold)

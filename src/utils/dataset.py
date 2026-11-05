@@ -19,6 +19,9 @@ class ImageClassificationDataset(TorchDataset):
     def __init__(self, root_dir, result_dir, transform=None):
         self.root_dir = root_dir
         self.result_dir = result_dir
+        self._embeddings_dir = os.path.join(self.result_dir, "embeddings")
+        if not os.path.exists(self._embeddings_dir):
+            os.makedirs(self._embeddings_dir, exist_ok=True)
         if not os.path.exists(result_dir):
             os.makedirs(self.result_dir, exist_ok=True)
             self._manifest_path = os.path.join(self.result_dir, "manifest.csv")
@@ -48,15 +51,24 @@ class ImageClassificationDataset(TorchDataset):
             mask = self._manifest['group_id'].isin(target_group_ids)
             self._manifest.loc[mask, 'group_id'] = new_group_id
             
-    def group_from_df(self, exact_groups: list[list[int]]):
-        for group in exact_groups:
-            new_group_id = str(uuid.uuid4())
-            
-            target_group_ids = self.df.iloc[group, 'group_id'].unique()
-            
-            mask = self._manifest['group_id'].isin(target_group_ids)
-            self._manifest.loc[mask, 'group_id'] = new_group_id
-        
+    def save_embeddings(self, embeddings, model_name):
+        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
+        np.save(embeddings_path, embeddings)
+    
+    def load_embeddings(self, model_name):
+        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
+        if os.path.exists(embeddings_path):
+            return np.load(embeddings_path)
+        return None
+    def save_perceptual_hashes(self, hashes, hash_name):
+        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
+        np.save(hashes_path, hashes)
+    
+    def load_perceptual_hashes(self, hash_name):
+        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
+        if os.path.exists(hashes_path):
+            return np.load(hashes_path)
+        return None
         
     def keep_first_in_group(self, reason="duplicate"):
         """
