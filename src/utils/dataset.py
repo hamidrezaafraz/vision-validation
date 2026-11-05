@@ -83,12 +83,14 @@ class ImageClassificationDataset(TorchDataset):
             return np.load(hashes_path)
         return None
         
-    def keep_first_in_group(self, reason="duplicate", column='group_id'):
+    def keep_first_in_group(self, reason="duplicate", column='group_id', ignore_label_conflict=False):
         """
         Looks for images sharing a UUID group_id. Sets the first one to 'keep' 
         and the rest to 'drop' with the provided reason.
         """
-        eligable = (self._manifest['action'] != 'drop') & ~self._manifest['label_conflict']
+        eligable = (self._manifest['action'] != 'drop')
+        if not ignore_label_conflict:
+            eligable = eligable & ~self._manifest['label_conflict']
         is_duplicate = self._manifest.duplicated(subset=[column], keep='first')
         
         
@@ -96,9 +98,10 @@ class ImageClassificationDataset(TorchDataset):
         self._manifest.loc[is_duplicate & eligable, 'action'] = 'drop'
         self._manifest.loc[is_duplicate & eligable, 'reason'] = reason
         
-        conflicting = self._manifest['label_conflict'] & (self._manifest['action'] != 'drop')
-        self._manifest.loc[conflicting, 'action'] = 'drop'
-        self._manifest.loc[conflicting, 'reason'] = 'Conflicting labels in group'
+        if not ignore_label_conflict:
+            conflicting = self._manifest['label_conflict'] & (self._manifest['action'] != 'drop')
+            self._manifest.loc[conflicting, 'action'] = 'drop'
+            self._manifest.loc[conflicting, 'reason'] = 'Conflicting labels in group'
         
         self.save_manifest()
         

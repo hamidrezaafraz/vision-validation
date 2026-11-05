@@ -37,6 +37,7 @@ class ClassificationArgs:
     resultdir: str = arg("Root directory of the results", "Data")
     
     keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Validation", default=False)
+    ignore_label_conflict: bool = arg("Ignore label conflicts when keeping the first image in a group", "Validation", default=False)
     restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
     
     verify_exact_duplicates: bool = arg("Group images with identical file hashes", "Exact hash duplicates", default=False)
@@ -93,19 +94,19 @@ def classification_cli(args: argparse.Namespace):
         dataset.restart()
     if cls_args.verify_exact_duplicates:
         verify_exact_duplicates(dataset)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group("exact hash duplicates")
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("exact hash duplicates", ignore_label_conflict=cls_args.ignore_label_conflict)
     if cls_args.verify_strict_duplicates:
         verify_strict_duplicates(dataset)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group("exact byte-level duplicates")
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("exact byte-level duplicates", ignore_label_conflict=cls_args.ignore_label_conflict)
     if cls_args.verify_near_duplicates:
         verify_near_duplicates(dataset, hash_name=cls_args.perceptual_hash, threshold=cls_args.hamming_threshold)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group("near duplicates")
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("near duplicates", ignore_label_conflict=cls_args.ignore_label_conflict)
     if cls_args.verify_near_embeddings:
-        verify_near_embeddings(dataset, model_name=cls_args.embedding_model_name, threshold=cls_args.embedding_threshold, batch_size=cls_args.embedding_batch_size)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group("semantic embeddings", column='split_group')
+        verify_near_embeddings(dataset, model_name=cls_args.embedding_model_name, threshold=cls_args.embedding_threshold, batch_size=cls_args.embedding_batch_size, ignore_label_conflict=cls_args.ignore_label_conflict)
+        if cls_args.keep_first_in_group: dataset.keep_first_in_group("semantic embeddings", column='split_group', ignore_label_conflict=cls_args.ignore_label_conflict)
     if cls_args.domain_expert_embedding:
         for model_name in cls_args.domain_expert_model_names:
             print(f"Applying domain expert model \"{model_name}\"")
-            verify_near_embeddings(dataset, model_name=model_name, threshold=cls_args.domain_expert_threshold, batch_size=cls_args.domain_expert_batch_size)
-            if cls_args.keep_first_in_group: dataset.keep_first_in_group(f"domain expert embeddings ({model_name})", column='split_group')
+            verify_near_embeddings(dataset, model_name=model_name, threshold=cls_args.domain_expert_threshold, batch_size=cls_args.domain_expert_batch_size, ignore_label_conflict=cls_args.ignore_label_conflict)
+            if cls_args.keep_first_in_group: dataset.keep_first_in_group(f"domain expert embeddings ({model_name})", column='split_group', ignore_label_conflict=cls_args.ignore_label_conflict)
 

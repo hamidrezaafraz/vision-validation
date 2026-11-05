@@ -12,7 +12,7 @@ def get_device():
         dev = "cuda"
     return dev
 
-def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128):
+def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128, ignore_label_conflict=False):
     """
     Verify near embeddings in the dataset (rows not dropped). Only merges the
     'split_group' column; group_id, action and reason are left untouched.
@@ -20,6 +20,7 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
     Parameters:
     - dataset: ImageClassificationDataset instance
     - threshold: float, similarity threshold for considering embeddings as near
+    - ignore_label_conflict: bool, whether to ignore label conflicts when grouping
     - batch_size: int, size of the batches to process
 
     Returns:
@@ -50,7 +51,10 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
         for i, d in enumerate(pairs):
             pairs[i] = [idx2idx[idx] for idx in d]
         # embeddings only link images for splitting; they never decide keep/drop
-        dataset.group(pairs, column='split_group')
+        if ignore_label_conflict:
+            dataset.group(pairs)
+        else:
+            dataset.group(pairs, column='split_group')
         dataset.save_manifest()
     else:
         print("No near embeddings found.")
