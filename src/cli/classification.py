@@ -102,12 +102,11 @@ def classification_cli(args: argparse.Namespace):
         if cls_args.keep_first_in_group: dataset.keep_first_in_group("near duplicates")
     if cls_args.verify_near_embeddings:
         verify_near_embeddings(dataset, model_name=cls_args.embedding_model_name, threshold=cls_args.embedding_threshold, batch_size=cls_args.embedding_batch_size)
-        if cls_args.keep_first_in_group: dataset.keep_first_in_group("semantic embeddings")
     if cls_args.domain_expert_embedding:
         for model_name in cls_args.domain_expert_model_names:
             print(f"Applying domain expert model \"{model_name}\"")
             verify_near_embeddings(dataset, model_name=model_name, threshold=cls_args.domain_expert_threshold, batch_size=cls_args.domain_expert_batch_size)
-            if cls_args.keep_first_in_group: dataset.keep_first_in_group(f"domain expert embeddings ({model_name})")
-
+    # if cls_args.verify_near_embeddings or cls_args.domain_expert_embedding:
+    #     if cls_args.keep_first_in_group: dataset.keep_first_in_group("semantic embeddings")
 
 

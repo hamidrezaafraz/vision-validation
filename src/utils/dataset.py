@@ -42,14 +42,27 @@ class ImageClassificationDataset(TorchDataset):
         image, label = self.dataset[idx]
         return image, label
     
-    def group(self, exact_groups: list[list[int]]):
+    def group(self, exact_groups: list[list[int]], column: str = 'group_id'):
+        """
+        Merges each list of row indices into one new group in `column`.
+
+        'group_id' is the duplicate group (drives keep/drop). Merges there are mirrored
+        into 'split_group', so split_group is always at least as coarse as group_id.
+        'split_group' is only used for group-aware splitting and never drives keep/drop.
+        """
+        columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
         for group in exact_groups:
-            new_group_id = str(uuid.uuid4())
-            
-            target_group_ids = self._manifest.loc[group, 'group_id'].unique()
-            
-            mask = self._manifest['group_id'].isin(target_group_ids)
-            self._manifest.loc[mask, 'group_id'] = new_group_id
+            for col in columns:
+                new_group_id = str(uuid.uuid4())
+                target_group_ids = self._manifest.loc[group, col].unique()
+                mask = self._manifest[col].isin(target_group_ids)
+                self._manifest.loc[mask, col] = new_group_id
+        self.update_label_conflict()
+
+    def update_label_conflict(self):
+        """True for rows whose split_group contains more than one distinct label."""
+        n_labels = self._manifest.groupby('split_group')['label'].transform('nunique')
+        self._manifest['label_conflict'] = n_labels > 1
             
     def save_embeddings(self, embeddings, model_name):
         embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
@@ -121,20 +134,29 @@ class ImageClassificationDataset(TorchDataset):
         if path is None:
             path = self._manifest_path
         if not os.path.exists(path):
-            self._manifest = pd.DataFrame(columns=["path", "label", "group_id", "action", "reason"])
+            self._manifest = pd.DataFrame(columns=["path", "label", "group_id", "split_group", "label_conflict", "action", "reason"])
             dataset_len = len(self.dataset.samples)
             self._manifest["path"] = [s[0] for s in self.dataset.samples]
             self._manifest["label"] = [s[1] for s in self.dataset.samples]
             self._manifest["group_id"] = [str(uuid.uuid4()) for _ in range(dataset_len)]
+            self._manifest["split_group"] = self._manifest["group_id"]
+            self._manifest["label_conflict"] = False
             self._manifest["action"] = [""] * dataset_len
             self._manifest["reason"] = [""] * dataset_len
             self._manifest.to_csv(path, index=False)
         else:
             self._manifest = pd.read_csv(
                 path, 
-                dtype={'group_id':str,'action': str, 'reason': str},
+                dtype={'group_id':str,'split_group':str,'label_conflict':bool,'action': str, 'reason': str},
                 keep_default_na=False  # Prevents empty strings from being converted to NaN
             )
+            if 'split_group' not in self._manifest.columns:  # manifest from before split_group existed
+                self._manifest.insert(3, 'split_group', self._manifest['group_id'])
+                self.save_manifest()
+            if 'label_conflict' not in self._manifest.columns:  # manifest from before label_conflict existed
+                self._manifest.insert(4, 'label_conflict', False)
+                self.update_label_conflict()
+                self.save_manifest()
 
 def similar_pairs(X, thr, chunk=2048):
     logger = Logger(__name__)

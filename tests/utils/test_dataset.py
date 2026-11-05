@@ -20,7 +20,7 @@ def dataset(make_image_folder, tmp_path):
 class TestManifest:
     def test_created_with_one_row_per_image(self, dataset, tmp_path):
         m = dataset._manifest
-        assert list(m.columns) == ["path", "label", "group_id", "action", "reason"]
+        assert list(m.columns) == ["path", "label", "group_id", "split_group", "label_conflict", "action", "reason"]
         assert len(m) == len(dataset) == 4
         assert list(m["label"]) == [0, 0, 0, 1]
         assert os.path.exists(tmp_path / "manifest.csv")
@@ -51,6 +51,26 @@ class TestGrouping:
         dataset.group([[0, 1]])
         dataset.group([[1, 2]])
         assert dataset._manifest.loc[[0, 1, 2], "group_id"].nunique() == 1
+
+    def test_group_id_merge_mirrors_into_split_group(self, dataset):
+        dataset.group([[0, 1]])
+        m = dataset._manifest
+        assert m.loc[0, "split_group"] == m.loc[1, "split_group"]
+
+    def test_split_group_merge_leaves_group_id_and_drops_alone(self, dataset):
+        dataset.group([[0, 1]], column="split_group")
+        dataset.keep_first_in_group(reason="dup")
+        m = dataset._manifest
+        assert m.loc[0, "split_group"] == m.loc[1, "split_group"]
+        assert m["group_id"].is_unique
+        assert list(m["action"]) == ["keep"] * 4
+
+    def test_label_conflict_flags_groups_with_mixed_labels(self, dataset):
+        assert not dataset._manifest["label_conflict"].any()
+        dataset.group([[0, 1]])  # both Happy: no conflict
+        assert not dataset._manifest["label_conflict"].any()
+        dataset.group([[2, 3]], column="split_group")  # Happy + Sad
+        assert list(dataset._manifest["label_conflict"]) == [False, False, True, True]
 
     def test_keep_first_in_group(self, dataset):
         dataset.group([[0, 1]])

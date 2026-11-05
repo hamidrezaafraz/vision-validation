@@ -14,7 +14,8 @@ def get_device():
 
 def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128):
     """
-    Verify near embeddings in the dataset.
+    Verify near embeddings in the dataset (rows not dropped). Only merges the
+    'split_group' column; group_id, action and reason are left untouched.
 
     Parameters:
     - dataset: ImageClassificationDataset instance
@@ -24,10 +25,6 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
     Returns:
     - None
     """
-    
-    
-    
-    
     
     device = get_device()
 
@@ -52,7 +49,9 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
         idx2idx = dataset.get_idx2idx()
         for i, d in enumerate(pairs):
             pairs[i] = [idx2idx[idx] for idx in d]
-        dataset.group(pairs)
+        # embeddings only link images for splitting; they never decide keep/drop
+        dataset.group(pairs, column='split_group')
+        dataset.save_manifest()
     else:
         print("No near embeddings found.")
 
