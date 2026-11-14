@@ -3,6 +3,7 @@ from dataclasses import MISSING, dataclass, field, fields
 from typing import ClassVar
 
 from src.utils.dataset import ImageDataset
+from src.utils.images import find_image_paths
 from src.exact_duplicates import verify_exact_duplicates, verify_strict_duplicates
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
 
@@ -70,7 +71,12 @@ def dataset_cli(args: argparse.Namespace):
     
     print(f"Validating dataset in \"{cls_args.datadir}\"")
     print(f"Storing results in \"{cls_args.resultdir}\"")
-    
+
+    image_paths = find_image_paths(cls_args.datadir)
+    print(f"Found {len(image_paths)} valid images")
+    print(image_paths[:5])
+    ImageDataset(image_paths, cls_args.resultdir)
+
     # dataset = ImageClassificationDataset(cls_args.datadir, cls_args.resultdir)
     
     # if cls_args.restart:
