@@ -15,6 +15,153 @@ from torchvision import datasets
 import pandas as pd
 
 
+class ImageDataset(TorchDataset):
+    def __init__(self, paths: list[str], result_dir, transform=None):
+        self.result_dir = result_dir
+        self.transform = transform
+        self.paths = paths
+        self._embeddings_dir = os.path.join(self.result_dir, "embeddings")
+        if not os.path.exists(self._embeddings_dir):
+            os.makedirs(self._embeddings_dir, exist_ok=True)
+        if not os.path.exists(result_dir):
+            os.makedirs(self.result_dir, exist_ok=True)
+            self._manifest_path = os.path.join(self.result_dir, "manifest.csv")
+            self._audit_path = os.path.join(self.result_dir, "audits.json")
+        else:
+            self._manifest_path = os.path.join(self.result_dir, "manifest.csv")
+            self._audit_path = os.path.join(self.result_dir, "audits.json")
+        
+        self.load_manifest()
+        
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        image = Image.open(self.paths[idx]).convert("RGB")
+        if self.transform:
+            image = self.transform(image)
+        return image
+    
+    def group(self, exact_groups: list[list[int]], column: str = 'group_id'):
+        """
+        Merges each list of row indices into one new group in `column`.
+
+        'group_id' is the duplicate group (drives keep/drop). Merges there are mirrored
+        into 'split_group', so split_group is always at least as coarse as group_id.
+        'split_group' is only used for group-aware splitting and never drives keep/drop.
+        """
+        columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
+        for group in exact_groups:
+            for col in columns:
+                new_group_id = str(uuid.uuid4())
+                target_group_ids = self._manifest.loc[group, col].unique()
+                mask = self._manifest[col].isin(target_group_ids)
+                self._manifest.loc[mask, col] = new_group_id
+
+            
+    def save_embeddings(self, embeddings, model_name):
+        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
+        np.save(embeddings_path, embeddings)
+    
+    def load_embeddings(self, model_name):
+        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
+        if os.path.exists(embeddings_path):
+            return np.load(embeddings_path)
+        return None
+    def save_perceptual_hashes(self, hashes, hash_name):
+        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
+        np.save(hashes_path, hashes)
+    
+    def load_perceptual_hashes(self, hash_name):
+        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
+        if os.path.exists(hashes_path):
+            return np.load(hashes_path)
+        return None
+        
+    def keep_first_in_group(self, reason="duplicate", column='group_id'):
+        """
+        Looks for images sharing a UUID group_id. Sets the first one to 'keep' 
+        and the rest to 'drop' with the provided reason.
+        """
+        eligable = (self._manifest['action'] != 'drop')
+        is_duplicate = self._manifest.duplicated(subset=[column], keep='first')
+        
+        
+        self._manifest.loc[~is_duplicate & eligable, 'action'] = 'keep'
+        self._manifest.loc[is_duplicate & eligable, 'action'] = 'drop'
+        self._manifest.loc[is_duplicate & eligable, 'reason'] = reason
+        
+        
+        self.save_manifest()
+        
+    def keep_first_in_split_group(self, reason="split group duplicate"):
+        """
+        Within each split_group, keeps the first non-dropped row and drops the rest,
+        but only for groups without a label conflict. Rows in conflicting groups are
+        left untouched, so different-label items (e.g. same person, other expression) survive.
+        """
+        eligible = (self._manifest['action'] != 'drop')
+        is_duplicate = (
+            self._manifest[eligible]
+            .duplicated(subset=['split_group'], keep='first')
+            .reindex(self._manifest.index, fill_value=False)
+            .astype(bool)
+        )
+        first = eligible & ~is_duplicate
+
+        self._manifest.loc[first & (self._manifest['action'] == ''), 'action'] = 'keep'
+        self._manifest.loc[is_duplicate, 'action'] = 'drop'
+        no_reason = self._manifest['reason'] == ''
+        self._manifest.loc[is_duplicate & no_reason, 'reason'] = reason
+        self.save_manifest()
+
+    def update_group_ids(self, indices, assigned_group_ids):
+        for index, group_id in zip(indices, assigned_group_ids):
+            self._manifest.loc[index, 'group_id'] = group_id
+        self.save_manifest()
+        
+    def get_idx2idx(self):
+        return {i: idx for i, idx in enumerate(self.df.index)}
+    
+    @property
+    def df(self):
+        return self._manifest[self._manifest['action'] != 'drop'].copy()
+    
+    def save_manifest(self):
+        self._manifest.to_csv(self._manifest_path, index=False)
+    
+    def restart(self):
+        """Deletes the manifest and starts over."""
+        self.delete_manifest()
+        self.load_manifest()
+        
+    def delete_manifest(self):
+        if os.path.exists(self._manifest_path):
+            os.remove(self._manifest_path)
+            
+    def load_manifest(self, path=None):
+        if path is None:
+            path = self._manifest_path
+        if not os.path.exists(path):
+            self._manifest = pd.DataFrame(columns=["path", "group_id", "split_group", "action", "reason"])
+            dataset_len = len(self.dataset.samples)
+            self._manifest["path"] = [s[0] for s in self.dataset.samples]
+            self._manifest["group_id"] = [str(uuid.uuid4()) for _ in range(dataset_len)]
+            self._manifest["split_group"] = self._manifest["group_id"]
+            self._manifest["action"] = [""] * dataset_len
+            self._manifest["reason"] = [""] * dataset_len
+            self._manifest.to_csv(path, index=False)
+        else:
+            self._manifest = pd.read_csv(
+                path, 
+                dtype={'group_id':str,'split_group':str,'action': str, 'reason': str},
+                keep_default_na=False  # Prevents empty strings from being converted to NaN
+            )
+            if 'split_group' not in self._manifest.columns:  # manifest from before split_group existed
+                self._manifest.insert(3, 'split_group', self._manifest['group_id'])
+                self.save_manifest()
+
 class ImageClassificationDataset(TorchDataset):
     def __init__(self, root_dir, result_dir, transform=None):
         self.root_dir = root_dir
