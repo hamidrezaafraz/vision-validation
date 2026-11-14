@@ -4,3 +4,10 @@ alex_reset_keep:
 	--verify_near_embeddings  \
 	--domain_expert_embedding --domain_expert_model_names facenet-vggface2 facenet-casia-webface \
 	--restart --keep_first_in_group
+
+data:
+	uv run main.py data --datadir="emotion/Data" --resultdir="emotion/results" \
+	--group_hash \
+	--group_perceptual_hash \
+	--perceptual_hash phash \
+	--hamming_threshold=4 \

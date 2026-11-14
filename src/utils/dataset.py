@@ -35,8 +35,9 @@ class ImageDataset(TorchDataset):
         
     def has_hash(self):
         return 'hash' in self._manifest.columns and not self._manifest['hash'].isnull().all()
-    def has_perceptual_hash(self):
-        return 'perceptual_hash' in self._manifest.columns and not self._manifest['perceptual_hash'].isnull().all()
+    
+    def has_perceptual_hash(self, hash_name):
+        return f'{hash_name}_perceptual_hash' in self._manifest.columns and not self._manifest[f'{hash_name}_perceptual_hash'].isnull().all()
 
     def __len__(self):
         return len(self.paths)
@@ -47,6 +48,22 @@ class ImageDataset(TorchDataset):
             image = self.transform(image)
         return image
     
+    def get_subset(self):
+        """Returns a Subset of the dataset containing only the rows that are not dropped."""
+        return Subset(self, self.df.index)
+    
+    def save_perceptual_pairs(self, pairs, hash_name, threshold):
+        if not os.path.exists(os.path.join(self.result_dir, "perceptual_pairs")):
+            os.makedirs(os.path.join(self.result_dir, "perceptual_pairs"), exist_ok=True)
+        pairs_path = os.path.join(self.result_dir, "perceptual_pairs", f"{hash_name}_thr_{threshold}.npy")
+        np.save(pairs_path, pairs)
+        
+    def load_perceptual_pairs(self, hash_name, threshold):
+        pairs_path = os.path.join(self.result_dir, "perceptual_pairs", f"{hash_name}_thr_{threshold}.npy")
+        if os.path.exists(pairs_path):
+            return np.load(pairs_path)
+        return None
+        
     def group(self, exact_groups: list[list[int]], column: str = 'group_id'):
         """
         Merges each list of row indices into one new group in `column`.
@@ -136,14 +153,18 @@ class ImageDataset(TorchDataset):
         self._manifest.to_csv(self._manifest_path, index=False)
     
     def restart(self):
-        """Deletes the manifest and starts over."""
-        self.delete_manifest()
-        self.load_manifest()
-        
+        """Gives every row a fresh group_id/split_group and clears action and reason.
+        Other columns (hash, perceptual_hash, ...) are left untouched."""
+        self._manifest["group_id"] = [str(uuid.uuid4()) for _ in range(len(self._manifest))]
+        self._manifest["split_group"] = self._manifest["group_id"]
+        self._manifest["action"] = ""
+        self._manifest["reason"] = ""
+        self.save_manifest()
+
     def delete_manifest(self):
         if os.path.exists(self._manifest_path):
             os.remove(self._manifest_path)
-            
+
     def load_manifest(self, path=None):
         if path is None:
             path = self._manifest_path

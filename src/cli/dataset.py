@@ -5,7 +5,7 @@ from typing import ClassVar
 from src.utils.dataset import ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
-from src.cli.lib import make_hashes, make_perceptual_hashes
+from src.cli.lib import make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash
 
 def arg(help: str, group: str, default=MISSING, choices=None):
     """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
@@ -39,17 +39,16 @@ class DatasetArgs:
     restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
     
     make_hashes : bool = arg("Hash every image and store the hashes", "Exact hash duplicates", default=False)
+    group_hash: bool = arg("Group images with identical file hashes (hashes them first if needed)", "Exact hash duplicates", default=False)
     
     make_perceptual_hashes: bool = arg("Compute perceptual hashes for every image and store the hashes", "Near duplicates", default=False)
+    perceptual_hash: str = arg("Perceptual hash function to use ('phash', 'average_hash', 'dhash', 'whash')", "Near duplicates", default='phash', choices=['phash', 'average_hash', 'dhash', 'whash'])
+    group_perceptual_hash: bool = arg("Group images whose perceptual hashes are within --hamming_threshold bits (hashes them first if needed)", "Near duplicates", default=False)
+    hamming_threshold: int = arg("Max Hamming distance (inclusive) for two perceptual hashes to count as near duplicates", "Near duplicates", default=1)
     
     make_general_embeddings: bool = arg("Compute general embeddings for every image and store the embeddings", "Semantic embeddings", default=False)
     
-    verify_exact_duplicates: bool = arg("Group images with identical file hashes", "Exact hash duplicates", default=False)
-    
-    verify_near_duplicates: bool = arg("Group images with perceptual hashes within a Hamming distance threshold", "Near duplicates", default=False)
-    # perceptual_hash: str = arg("Perceptual hash function to use ('phash', 'average_hash', 'dhash', 'whash')", "Near duplicates", default='phash', choices=['phash', 'average_hash', 'dhash', 'whash'])
-    # hamming_threshold: int = arg("Hamming distance threshold for perceptual hash comparison", "Near duplicates", default=1)
-    
+        
     # keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Validation", default=False)
     # restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
     
@@ -83,11 +82,12 @@ def dataset_cli(args: argparse.Namespace):
     data_args = DatasetArgs.from_namespace(args)
     
     print(f"Validating dataset in \"{data_args.datadir}\"")
-    print(f"Storing results in \"{data_args.resultdir}\"")
+    print(f"Storing results in \"{data_args.resultdir}\"\n")
 
+    print(f"Validating images...")
     image_paths = find_image_paths(data_args.datadir)
-    print(f"Found {len(image_paths)} valid images")
-    print(image_paths[:5])
+    print(f"Found {len(image_paths)} valid images\n")
+
     dataset = ImageDataset(image_paths, data_args.resultdir)
 
     
@@ -95,16 +95,19 @@ def dataset_cli(args: argparse.Namespace):
         dataset.restart()
     if data_args.make_hashes:
         make_hashes(dataset)
+    if data_args.group_hash:
+        group_by_hash(dataset)
     if data_args.make_perceptual_hashes:
-        make_perceptual_hashes(dataset)
+        make_perceptual_hashes(dataset, hash_name=data_args.perceptual_hash)
+    if data_args.group_perceptual_hash:
+        group_by_perceptual_hash(dataset, hash_name=data_args.perceptual_hash, threshold=data_args.hamming_threshold)
         
     if data_args.make_general_embeddings:
         if not dataset.has_hash():
             print("Hashing images before computing embeddings...")
             make_hashes(dataset)
-        # verify_near_embeddings(dataset, model_name="resnet50", threshold=0.5, batch_size=32, ignore_label_conflict=True)
         
-        
+    print(f"Remaining images after validation: {len(dataset.df)}")
     # if data_args.verify_exact_duplicates:
     #     verify_exact_duplicates(dataset)
     #     if data_args.keep_first_in_group: dataset.keep_first_in_group("exact hash duplicates", ignore_label_conflict=data_args.ignore_label_conflict)

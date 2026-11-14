@@ -7,6 +7,14 @@ import torch.nn.functional as F
 from facenet_pytorch import InceptionResnetV1
 from torchvision.transforms import transforms
 
+def get_device():
+    dev = "cpu"
+    if torch.backends.mps.is_available():
+        dev = "mps"
+    elif torch.cuda.is_available():
+        dev = "cuda"
+    return dev
+
 def similar_pairs(X, thr, chunk=2048, device="cpu"):
     """X: (N,D) L2-normalised. Returns (i,j), i<j, with cosine >= thr."""
     X = X.to(device)

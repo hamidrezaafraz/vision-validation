@@ -1,16 +1,10 @@
 import torch
-from src.near_duplicates.embeddings import get_embeddings, get_model, similar_pairs, get_transform
+from src.near_duplicates.embeddings import get_embeddings, get_model, similar_pairs, get_transform, get_device
 from src.near_duplicates.perceptual_hashes import get_perceptual_hashes, hamming_pairs
 from src.utils.dataset import ImageClassificationDataset
 from torch.utils.data import Subset
 
-def get_device():
-    dev = "cpu"
-    if torch.backends.mps.is_available():
-        dev = "mps"
-    elif torch.cuda.is_available():
-        dev = "cuda"
-    return dev
+
 
 def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128, ignore_label_conflict=False):
     """
@@ -51,10 +45,7 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
         for i, d in enumerate(pairs):
             pairs[i] = [idx2idx[idx] for idx in d]
         # embeddings only link images for splitting; they never decide keep/drop
-        if ignore_label_conflict:
-            dataset.group(pairs)
-        else:
-            dataset.group(pairs, column='split_group')
+        dataset.group(pairs, column='split_group')
         dataset.save_manifest()
     else:
         print("No near embeddings found.")
