@@ -1,4 +1,4 @@
-from src.utils.dataset import ImageClassificationDataset
+from src.utils.dataset import ImageClassificationDataset, ImageDataset
 from src.exact_duplicates.hashing import get_paths_by_hash
 from src.exact_duplicates.file_compare import find_strict_duplicates
 
@@ -25,6 +25,7 @@ def verify_strict_duplicates(dataset: ImageClassificationDataset):
         dataset.group(exact_groups)
     else:
         print("No exact duplicates found.")
+
 
 __all__ = (
     'verify_exact_duplicates', 

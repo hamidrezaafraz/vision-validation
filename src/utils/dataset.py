@@ -33,6 +33,10 @@ class ImageDataset(TorchDataset):
         
         self.load_manifest()
         
+    def has_hash(self):
+        return 'hash' in self._manifest.columns and not self._manifest['hash'].isnull().all()
+    def has_perceptual_hash(self):
+        return 'perceptual_hash' in self._manifest.columns and not self._manifest['perceptual_hash'].isnull().all()
 
     def __len__(self):
         return len(self.paths)
@@ -145,8 +149,8 @@ class ImageDataset(TorchDataset):
             path = self._manifest_path
         if not os.path.exists(path):
             self._manifest = pd.DataFrame(columns=["path", "group_id", "split_group", "action", "reason"])
-            dataset_len = len(self.dataset.samples)
-            self._manifest["path"] = [s[0] for s in self.dataset.samples]
+            dataset_len = len(self.paths)
+            self._manifest["path"] = self.paths
             self._manifest["group_id"] = [str(uuid.uuid4()) for _ in range(dataset_len)]
             self._manifest["split_group"] = self._manifest["group_id"]
             self._manifest["action"] = [""] * dataset_len

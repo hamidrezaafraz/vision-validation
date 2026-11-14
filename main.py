@@ -24,8 +24,6 @@ def main():
     match args.command:
         case "cls":
             classification_cli(args)
-            # dataset = ImageClassificationDataset(args.datadir, args.resultdir)
-            # print(dataset.df.head())
         case "data":
             dataset_cli(args)
         case "seg":

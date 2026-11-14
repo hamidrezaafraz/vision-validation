@@ -26,7 +26,7 @@ def get_hash_func(hash_name: str) -> callable:
     else:
         raise ValueError(f"Unknown hash name: {hash_name}")
 
-def get_perceptual_hashes(paths: list[str], hash_name: str = 'phash') -> np.ndarray:
+def get_perceptual_hashes(paths: list[str], hash_name: str = 'phash', rgb=False) -> np.ndarray:
     """
     Compute perceptual hashes for all images in the dataset.
 
@@ -38,7 +38,10 @@ def get_perceptual_hashes(paths: list[str], hash_name: str = 'phash') -> np.ndar
     - H: numpy array of shape (num_images, hash_size) containing the hashes
     """
     hash_func = get_hash_func(hash_name)
-    H = np.array([hash_func(Image.open(p).convert("L")).hash.flatten() for p in tqdm(paths, desc="Computing perceptual hashes")])
+    if rgb:
+        H = np.array([hash_func(Image.open(p)).hash.flatten() for p in tqdm(paths, desc="Computing perceptual hashes")])
+    else:
+        H = np.array([hash_func(Image.open(p).convert("L")).hash.flatten() for p in tqdm(paths, desc="Computing perceptual hashes")])
     return H
 
 def hamming_pairs(ndarray: np.ndarray, threshold: int, chunk_size: int = 2048):
