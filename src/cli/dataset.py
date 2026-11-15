@@ -52,6 +52,12 @@ class DatasetArgs:
     embedding_threshold: float = arg("Min cosine similarity for two embeddings to count as near duplicates", "Semantic embeddings", default=0.95)
     embedding_batch_size: int = arg("Batch size used when computing embeddings", "Semantic embeddings", default=128)
     
+    make_expert_embeddings: bool = arg("Compute domain expert embeddings for every image and store the embeddings", "Domain expert", default=False)
+    group_expert_embeddings: bool = arg("Group images whose domain expert embeddings have cosine similarity >= --domain_expert_threshold (embeds them first if needed)", "Domain expert", default=False)
+    domain_expert_model_names: tuple = arg("Names of the domain expert models to apply one by one, e.g. --domain_expert_model_names facenet-vggface2 facenet-casia-webface", "Domain expert", default=('facenet-vggface2',), choices=['facenet-vggface2', 'facenet-casia-webface'])
+    domain_expert_threshold: float = arg("Min cosine similarity for two domain expert embeddings to count as near duplicates", "Domain expert", default=0.95)
+    domain_expert_batch_size: int = arg("Batch size used when computing domain expert embeddings", "Domain expert", default=128)
+    
         
     # keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Validation", default=False)
     # restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
@@ -118,23 +124,18 @@ def dataset_cli(args: argparse.Namespace):
             make_hashes(dataset)
         group_by_embeddings(dataset, model_name=data_args.embedding_model_name, threshold=data_args.embedding_threshold)
         
-        
-    print(f"Remaining images after validation: {len(dataset.df)}")
-    # if data_args.verify_exact_duplicates:
-    #     verify_exact_duplicates(dataset)
-    #     if data_args.keep_first_in_group: dataset.keep_first_in_group("exact hash duplicates", ignore_label_conflict=data_args.ignore_label_conflict)
-    # if data_args.verify_strict_duplicates:
-    #     verify_strict_duplicates(dataset)
-    #     if data_args.keep_first_in_group: dataset.keep_first_in_group("exact byte-level duplicates", ignore_label_conflict=data_args.ignore_label_conflict)
-    # if data_args.verify_near_duplicates:
-    #     verify_near_duplicates(dataset, hash_name=data_args.perceptual_hash, threshold=data_args.hamming_threshold)
-    #     if data_args.keep_first_in_group: dataset.keep_first_in_group("near duplicates", ignore_label_conflict=data_args.ignore_label_conflict)
-    # if data_args.verify_near_embeddings:
-    #     verify_near_embeddings(dataset, model_name=data_args.embedding_model_name, threshold=data_args.embedding_threshold, batch_size=data_args.embedding_batch_size, ignore_label_conflict=data_args.ignore_label_conflict)
-    #     if data_args.keep_first_in_group: dataset.keep_first_in_group("semantic embeddings", column='split_group', ignore_label_conflict=data_args.ignore_label_conflict)
-    # if data_args.domain_expert_embedding:
-    #     for model_name in data_args.domain_expert_model_names:
-    #         print(f"Applying domain expert model \"{model_name}\"")
-    #         verify_near_embeddings(dataset, model_name=model_name, threshold=data_args.domain_expert_threshold, batch_size=data_args.domain_expert_batch_size, ignore_label_conflict=data_args.ignore_label_conflict)
-    #         if cls_args.keep_first_in_group: dataset.keep_first_in_group(f"domain expert embeddings ({model_name})", column='split_group', ignore_label_conflict=cls_args.ignore_label_conflict)
+    if data_args.make_expert_embeddings:
+        if not dataset.has_hash():
+            print("Hashing images before computing domain expert embeddings...")
+            make_hashes(dataset)
+        for model_name in data_args.domain_expert_model_names:
+            make_general_embeddings(dataset, model_name=model_name, batch_size=data_args.domain_expert_batch_size)
 
+    if data_args.group_expert_embeddings:
+        if not dataset.has_hash():
+            print("Hashing images before grouping by domain expert embeddings...")
+            make_hashes(dataset)
+        for model_name in data_args.domain_expert_model_names:
+            group_by_embeddings(dataset, model_name=model_name, threshold=data_args.domain_expert_threshold)
+    print(f"Remaining images after validation: {len(dataset.df)}")
+   
