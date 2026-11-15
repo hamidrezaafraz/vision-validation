@@ -111,7 +111,7 @@ def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_na
     dataset.transform = transform        
     print("Embedding the full dataset...")
     emb = get_embeddings(model, dataset, batch_size=batch_size, device=device)
-    dataset.save_embeddings(emb, model_name=model_name)
+    return emb
 
 def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95):
     """
@@ -130,8 +130,8 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
     emb = dataset.load_embeddings(model_name=model_name)
     if emb is None:
         print("Embedding the full dataset...")
-        make_embeddings(dataset, model_name=model_name, batch_size=64)
-        emb = dataset.load_embeddings(model_name=model_name)
+        emb = make_embeddings(dataset, model_name=model_name, batch_size=64)
+        dataset.save_embeddings(emb, model_name=model_name)
         
     device = get_device()
     emb = emb[dataset.df.index]  # Ensure embeddings are in the same order as the dataset
@@ -139,60 +139,11 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
     pairs = similar_pairs(emb, thr=threshold, device=device)
 
     if len(pairs) > 0:
-        print(f"Found {len(pairs)} pairs of near embeddings.")
+        groups = merge_pairs(pairs)
+        print(f"Found {len(pairs)} close embeddings with similarity <= {threshold}, merged into {len(groups)} groups.")
         idx2idx = dataset.get_idx2idx()
-        for i, d in enumerate(pairs):
-            pairs[i] = [idx2idx[idx] for idx in d]
-        dataset.group(pairs, column='split_group')
+        groups = [[idx2idx[idx] for idx in g] for g in groups]
+        dataset.group(groups, column='split_group')
         dataset.save_manifest()
     else:
         print("No near embeddings found.")    
-
-def verify_near_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128, embed_full_dataset=False):
-    """
-    Verify near embeddings in the dataset (rows not dropped). Only merges the
-    'split_group' column; group_id, action and reason are left untouched.
-
-    Parameters:
-    - dataset: ImageClassificationDataset instance
-    - threshold: float, similarity threshold for considering embeddings as near
-    - ignore_label_conflict: bool, whether to ignore label conflicts when grouping
-    - batch_size: int, size of the batches to process
-    - embed_full_dataset: bool, whether to embed the full dataset or just the current subset
-
-    Returns:
-    - None
-    """
-    
-    device = get_device()
-
-    model = get_model(model_name=model_name, device=device)
-    transform = get_transform(model_name=model_name)
-    dataset.transform = transform
-    # get all the embeddings for the dataset using the specified model
-    
-    
-    emb = dataset.load_embeddings(model_name=model_name)
-    if emb is None:
-        if embed_full_dataset:
-            print("Embedding the full dataset...")
-            emb = get_embeddings(model, dataset, batch_size=batch_size, device=device)
-        else:
-            print("Embedding the current subset of the dataset...")
-            sub_ds = dataset.get_subset()
-            emb = get_embeddings(model, sub_ds, batch_size=batch_size, device=device)
-        dataset.save_embeddings(emb, model_name=model_name)
-    
-    emb = emb[dataset.df.index]  # Ensure embeddings are in the same order as the dataset
-    emb = torch.tensor(emb)
-    pairs = similar_pairs(emb, thr=threshold, device=device)
-
-    if len(pairs) > 0:
-        print(f"Found {len(pairs)} pairs of near embeddings.")
-        idx2idx = dataset.get_idx2idx()
-        for i, d in enumerate(pairs):
-            pairs[i] = [idx2idx[idx] for idx in d]
-        dataset.group(pairs, column='split_group')
-        dataset.save_manifest()
-    else:
-        print("No near embeddings found.")

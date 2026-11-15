@@ -1,5 +1,4 @@
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 import uuid
 
 import numpy as np
@@ -14,6 +13,7 @@ from tqdm import tqdm
 from PIL import Image
 from torchvision import datasets
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 
 
 class ImageDataset(TorchDataset):
@@ -65,50 +65,65 @@ class ImageDataset(TorchDataset):
             return np.load(pairs_path)
         return None
         
-    def group(self, exact_groups: list[list[int]], column: str = 'group_id', workers: int = 4):
+    def __group(self, exact_groups: list[list[int]], column: str = 'group_id'):
         """
         Merges each list of row indices into one new group in `column`.
 
         'group_id' is the duplicate group (drives keep/drop). Merges there are mirrored
         into 'split_group', so split_group is always at least as coarse as group_id.
         'split_group' is only used for group-aware splitting and never drives keep/drop.
-
-        The current ids of every group are looked up in parallel (`workers` threads), then
-        overlapping groups are merged with a union-find and every merged set gets one new
-        UUID. This gives the same result as merging the groups one after another.
         """
         columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
-        if not exact_groups:
-            return
-        chunks = [exact_groups[i::workers] for i in range(workers)]
+        for group in exact_groups:
+            for col in columns:
+                new_group_id = str(uuid.uuid4())
+                target_group_ids = self._manifest.loc[group, col].unique()
+                mask = self._manifest[col].isin(target_group_ids)
+                self._manifest.loc[mask, col] = new_group_id
 
-        for col in columns:
-            series = self._manifest[col]
-
-            def lookup(chunk):
-                return [series.loc[g].unique().tolist() for g in chunk]
-
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                per_chunk = list(pool.map(lookup, chunks))
-
-            parent = {}
-            def find(x):
-                parent.setdefault(x, x)
-                while parent[x] != x:
-                    parent[x] = parent[parent[x]]
-                    x = parent[x]
-                return x
-
-            for ids in (ids for chunk in per_chunk for ids in chunk):
-                root = find(ids[0])
-                for other in ids[1:]:
-                    parent[find(other)] = root
-
-            new_ids = {}
-            mapping = {old: new_ids.setdefault(find(old), str(uuid.uuid4())) for old in list(parent)}
-            self._manifest[col] = series.map(lambda v: mapping.get(v, v))
-
-
+    def group(self, exact_groups: list[list[int]], column: str = 'group_id', workers: int = 4):
+            """
+            Merges each list of row indices into one new group in `column`.
+    
+            'group_id' is the duplicate group (drives keep/drop). Merges there are mirrored
+            into 'split_group', so split_group is always at least as coarse as group_id.
+            'split_group' is only used for group-aware splitting and never drives keep/drop.
+    
+            The current ids of every group are looked up in parallel (`workers` threads), then
+            overlapping groups are merged with a union-find and every merged set gets one new
+            UUID. This gives the same result as merging the groups one after another.
+            """
+            print(f"\nMerging {len(exact_groups)} groups into column '{column}' with {workers} workers...\n")
+            columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
+            if not exact_groups:
+                return
+            chunks = [exact_groups[i::workers] for i in range(workers)]
+    
+            for col in columns:
+                series = self._manifest[col]
+    
+                def lookup(chunk):
+                    return [series.loc[g].unique().tolist() for g in chunk]
+    
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    per_chunk = list(pool.map(lookup, chunks))
+    
+                parent = {}
+                def find(x):
+                    parent.setdefault(x, x)
+                    while parent[x] != x:
+                        parent[x] = parent[parent[x]]
+                        x = parent[x]
+                    return x
+    
+                for ids in (ids for chunk in per_chunk for ids in chunk):
+                    root = find(ids[0])
+                    for other in ids[1:]:
+                        parent[find(other)] = root
+    
+                new_ids = {}
+                mapping = {old: new_ids.setdefault(find(old), str(uuid.uuid4())) for old in list(parent)}
+                self._manifest[col] = series.map(lambda v: mapping.get(v, v))      
     def save_embeddings(self, embeddings, model_name):
         embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
         np.save(embeddings_path, embeddings)
