@@ -5,7 +5,7 @@ from typing import ClassVar
 from src.utils.dataset import ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
-from src.cli.lib import make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash
+from src.cli.lib import make_general_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
 
 def arg(help: str, group: str, default=MISSING, choices=None):
     """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
@@ -47,6 +47,10 @@ class DatasetArgs:
     hamming_threshold: int = arg("Max Hamming distance (inclusive) for two perceptual hashes to count as near duplicates", "Near duplicates", default=1)
     
     make_general_embeddings: bool = arg("Compute general embeddings for every image and store the embeddings", "Semantic embeddings", default=False)
+    group_embeddings: bool = arg("Group images whose embeddings have cosine similarity >= --embedding_threshold (embeds them first if needed)", "Semantic embeddings", default=False)
+    embedding_model_name: str = arg("Model used to compute the embeddings", "Semantic embeddings", default='alexnet')
+    embedding_threshold: float = arg("Min cosine similarity for two embeddings to count as near duplicates", "Semantic embeddings", default=0.95)
+    embedding_batch_size: int = arg("Batch size used when computing embeddings", "Semantic embeddings", default=128)
     
         
     # keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Validation", default=False)
@@ -106,6 +110,14 @@ def dataset_cli(args: argparse.Namespace):
         if not dataset.has_hash():
             print("Hashing images before computing embeddings...")
             make_hashes(dataset)
+        make_general_embeddings(dataset, model_name=data_args.embedding_model_name, batch_size=data_args.embedding_batch_size)
+    
+    if data_args.group_embeddings:
+        if not dataset.has_hash():
+            print("Hashing images before grouping by embeddings...")
+            make_hashes(dataset)
+        group_by_embeddings(dataset, model_name=data_args.embedding_model_name, threshold=data_args.embedding_threshold)
+        
         
     print(f"Remaining images after validation: {len(dataset.df)}")
     # if data_args.verify_exact_duplicates:

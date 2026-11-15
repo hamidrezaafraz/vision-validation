@@ -6,6 +6,27 @@ from src.near_duplicates.perceptual_hashes import get_perceptual_hashes, hamming
 from src.near_duplicates.embeddings import get_embeddings, similar_pairs, get_model, get_transform, get_device
 import torch
 
+def merge_pairs(pairs) -> list[list[int]]:
+    """Merges overlapping pairs into connected groups: [[1,3],[3,5],[4,6]] -> [[1,3,5],[4,6]]."""
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for pair in pairs:
+        root = find(pair[0])
+        for x in pair[1:]:
+            parent[find(x)] = root
+
+    groups = {}
+    for x in sorted(parent):
+        groups.setdefault(find(x), []).append(int(x))
+    return list(groups.values())
+
 def make_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="blake2b"):
     """Hashes all images in the dataset and saves the hashes."""
     dataset._manifest['hash'] = dataset._manifest['path'].apply(
@@ -62,14 +83,70 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
     
 
     if len(pairs) > 0:
-        print(f"Found {len(pairs)} pairs of near duplicates with Hamming distance < {threshold}.")
+        groups = merge_pairs(pairs)
+        print(f"Found {len(pairs)} pairs of near duplicates with Hamming distance <= {threshold}, merged into {len(groups)} groups.")
         idx2idx = dataset.get_idx2idx()
-        for i, d in enumerate(pairs):
-            pairs[i] = [idx2idx[idx] for idx in d]
-        dataset.group(pairs)
+        groups = [[idx2idx[idx] for idx in g] for g in groups]
+        dataset.group(groups)
         dataset.keep_first_in_group(reason="near-perceptual-hash duplicates")
     else:
         print("No near duplicates found.")
+
+def make_general_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
+    """
+    make general embeddings for the dataset.
+
+    Parameters:
+    - dataset: ImageClassificationDataset instance
+    - model_name: str, name of the model to use for embedding
+    - batch_size: int, size of the batches to process
+
+    Returns:
+    - None
+    """
+    
+    device = get_device()
+    model = get_model(model_name=model_name, device=device)
+    transform = get_transform(model_name=model_name)
+    dataset.transform = transform        
+    print("Embedding the full dataset...")
+    emb = get_embeddings(model, dataset, batch_size=batch_size, device=device)
+    dataset.save_embeddings(emb, model_name=model_name)
+
+def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95):
+    """
+    Verify near embeddings in the dataset (rows not dropped). Only merges the
+    'split_group' column; group_id, action and reason are left untouched.
+
+    Parameters:
+    - dataset: ImageClassificationDataset instance
+    - model_name: str, name of the model to use for embedding
+    - threshold: float, similarity threshold for considering embeddings as near
+
+    Returns:
+    - None
+    """
+        
+    emb = dataset.load_embeddings(model_name=model_name)
+    if emb is None:
+        print("Embedding the full dataset...")
+        make_general_embeddings(dataset, model_name=model_name, batch_size=64)
+        emb = dataset.load_embeddings(model_name=model_name)
+        
+    device = get_device()
+    emb = emb[dataset.df.index]  # Ensure embeddings are in the same order as the dataset
+    emb = torch.tensor(emb)
+    pairs = similar_pairs(emb, thr=threshold, device=device)
+
+    if len(pairs) > 0:
+        print(f"Found {len(pairs)} pairs of near embeddings.")
+        idx2idx = dataset.get_idx2idx()
+        for i, d in enumerate(pairs):
+            pairs[i] = [idx2idx[idx] for idx in d]
+        dataset.group(pairs, column='split_group')
+        dataset.save_manifest()
+    else:
+        print("No near embeddings found.")    
 
 def verify_near_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128, embed_full_dataset=False):
     """

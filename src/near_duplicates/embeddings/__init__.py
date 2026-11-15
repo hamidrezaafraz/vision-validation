@@ -79,7 +79,7 @@ def get_embeddings(model, sub_ds, batch_size, device="cpu"):
     feats = []
     dataloader = DataLoader(sub_ds, batch_size=batch_size, shuffle=False)
     with torch.no_grad():
-        for x, _ in tqdm(dataloader, desc="Computing features"):
+        for x, *_ in tqdm(dataloader, desc="Computing features"):
             feats.append(F.normalize(model(x.to(device)), dim=1).cpu())
             
     emb = torch.cat(feats)
