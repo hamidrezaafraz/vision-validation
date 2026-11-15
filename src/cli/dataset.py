@@ -5,7 +5,7 @@ from typing import ClassVar
 from src.utils.dataset import ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
-from src.cli.lib import make_general_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
+from src.cli.lib import make_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
 
 def arg(help: str, group: str, default=MISSING, choices=None):
     """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
@@ -116,7 +116,7 @@ def dataset_cli(args: argparse.Namespace):
         if not dataset.has_hash():
             print("Hashing images before computing embeddings...")
             make_hashes(dataset)
-        make_general_embeddings(dataset, model_name=data_args.embedding_model_name, batch_size=data_args.embedding_batch_size)
+        make_embeddings(dataset, model_name=data_args.embedding_model_name, batch_size=data_args.embedding_batch_size)
     
     if data_args.group_embeddings:
         if not dataset.has_hash():
@@ -129,7 +129,7 @@ def dataset_cli(args: argparse.Namespace):
             print("Hashing images before computing domain expert embeddings...")
             make_hashes(dataset)
         for model_name in data_args.domain_expert_model_names:
-            make_general_embeddings(dataset, model_name=model_name, batch_size=data_args.domain_expert_batch_size)
+            make_embeddings(dataset, model_name=model_name, batch_size=data_args.domain_expert_batch_size)
 
     if data_args.group_expert_embeddings:
         if not dataset.has_hash():

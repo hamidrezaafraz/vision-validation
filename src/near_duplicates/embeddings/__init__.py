@@ -79,7 +79,11 @@ def get_embeddings(model, sub_ds, batch_size, device="cpu"):
     feats = []
     dataloader = DataLoader(sub_ds, batch_size=batch_size, shuffle=False)
     with torch.no_grad():
-        for x, *_ in tqdm(dataloader, desc="Computing features"):
+        for samples in tqdm(dataloader, desc="Computing features"):
+            if isinstance(samples, (list, tuple)):
+                x = samples[0]  # Assuming the first element is the image tensor
+            else:
+                x = samples
             feats.append(F.normalize(model(x.to(device)), dim=1).cpu())
             
     emb = torch.cat(feats)

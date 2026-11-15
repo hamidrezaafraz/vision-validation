@@ -11,6 +11,14 @@ data:
 	--group_perceptual_hash --perceptual_hash phash --hamming_threshold=4 \
 	--group_embeddings --embedding_model_name alexnet --embedding_threshold 0.95 
 
+make_data:
+	uv run main.py data --datadir="emotion/Data" --resultdir="emotion/results" \
+	--make_expert_embeddings --domain_expert_model_names facenet-vggface2 --domain_expert_batch_size 64
+
+make_general:
+	uv run main.py data --datadir="emotion/Data" --resultdir="emotion/results" \
+	--make_general_embeddings --embedding_model_name alexnet 
+	
 data_reset:
 	uv run main.py data --datadir="emotion/Data" --resultdir="emotion/results" \
 	--group_hash \

@@ -94,6 +94,28 @@ class TestGrouping:
         dataset.keep_first_in_group(reason="perceptual dup")
         assert list(dataset._manifest["reason"]) == ["", "exact dup", "perceptual dup", ""]
 
+    def test_keep_random_in_group_keeps_exactly_one_per_group(self, dataset):
+        dataset.group([[0, 1, 2]])
+        dataset.keep_random_in_group(reason="dup", seed=0)
+        m = dataset._manifest
+        assert list(m["action"]).count("keep") == 2  # one of the group + the singleton
+        assert m.loc[3, "action"] == "keep"
+        assert list(m.loc[:2, "action"]).count("keep") == 1
+        assert set(m.loc[m["action"] == "drop", "reason"]) == {"dup"}
+
+    def test_keep_random_in_group_is_reproducible_and_not_always_first(self, dataset):
+        winners = set()
+        for seed in range(20):
+            dataset.restart()
+            dataset.group([[0, 1, 2]])
+            dataset.keep_random_in_group(seed=seed)
+            winners.add(tuple(dataset._manifest["action"][:3]))
+        assert len(winners) > 1
+        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_random_in_group(seed=3)
+        first = list(dataset._manifest["action"])
+        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_random_in_group(seed=3)
+        assert list(dataset._manifest["action"]) == first
+
     def test_df_excludes_dropped_rows(self, dataset):
         dataset.group([[0, 1]])
         dataset.keep_first_in_group()

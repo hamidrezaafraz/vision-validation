@@ -1,4 +1,5 @@
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 import uuid
 
 import numpy as np
@@ -64,23 +65,50 @@ class ImageDataset(TorchDataset):
             return np.load(pairs_path)
         return None
         
-    def group(self, exact_groups: list[list[int]], column: str = 'group_id'):
+    def group(self, exact_groups: list[list[int]], column: str = 'group_id', workers: int = 4):
         """
         Merges each list of row indices into one new group in `column`.
 
         'group_id' is the duplicate group (drives keep/drop). Merges there are mirrored
         into 'split_group', so split_group is always at least as coarse as group_id.
         'split_group' is only used for group-aware splitting and never drives keep/drop.
+
+        The current ids of every group are looked up in parallel (`workers` threads), then
+        overlapping groups are merged with a union-find and every merged set gets one new
+        UUID. This gives the same result as merging the groups one after another.
         """
         columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
-        for group in exact_groups:
-            for col in columns:
-                new_group_id = str(uuid.uuid4())
-                target_group_ids = self._manifest.loc[group, col].unique()
-                mask = self._manifest[col].isin(target_group_ids)
-                self._manifest.loc[mask, col] = new_group_id
+        if not exact_groups:
+            return
+        chunks = [exact_groups[i::workers] for i in range(workers)]
 
-            
+        for col in columns:
+            series = self._manifest[col]
+
+            def lookup(chunk):
+                return [series.loc[g].unique().tolist() for g in chunk]
+
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                per_chunk = list(pool.map(lookup, chunks))
+
+            parent = {}
+            def find(x):
+                parent.setdefault(x, x)
+                while parent[x] != x:
+                    parent[x] = parent[parent[x]]
+                    x = parent[x]
+                return x
+
+            for ids in (ids for chunk in per_chunk for ids in chunk):
+                root = find(ids[0])
+                for other in ids[1:]:
+                    parent[find(other)] = root
+
+            new_ids = {}
+            mapping = {old: new_ids.setdefault(find(old), str(uuid.uuid4())) for old in list(parent)}
+            self._manifest[col] = series.map(lambda v: mapping.get(v, v))
+
+
     def save_embeddings(self, embeddings, model_name):
         embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
         np.save(embeddings_path, embeddings)
@@ -100,6 +128,25 @@ class ImageDataset(TorchDataset):
             return np.load(hashes_path)
         return None
         
+    def keep_random_in_group(self, reason="duplicate", column='group_id', seed=None):
+        """
+        Like keep_first_in_group, but the survivor of each group is picked at random
+        among its non-dropped rows. Pass `seed` for a reproducible choice.
+        """
+        eligible = (self._manifest['action'] != 'drop')
+        chosen = self._pick_random_per_group(eligible, column, seed)
+        drop = eligible & ~self._manifest.index.isin(chosen)
+
+        self._manifest.loc[eligible & ~drop, 'action'] = 'keep'
+        self._manifest.loc[drop, 'action'] = 'drop'
+        self._manifest.loc[drop, 'reason'] = reason
+        self.save_manifest()
+
+    def _pick_random_per_group(self, eligible, column, seed=None):
+        """Index labels of one randomly chosen eligible row per value of `column`."""
+        shuffled = self._manifest[eligible].sample(frac=1, random_state=np.random.default_rng(seed))
+        return shuffled.drop_duplicates(subset=[column], keep='first').index
+
     def keep_first_in_group(self, reason="duplicate", column='group_id'):
         """
         Looks for images sharing a UUID group_id. Sets the first one to 'keep' 
@@ -255,6 +302,30 @@ class ImageClassificationDataset(TorchDataset):
             return np.load(hashes_path)
         return None
         
+    def keep_random_in_group(self, reason="duplicate", column='group_id', ignore_label_conflict=False, seed=None):
+        """
+        Like keep_first_in_group, but the survivor of each group is picked at random
+        among its eligible rows (not dropped, and without a label conflict unless
+        ignore_label_conflict). Pass `seed` for a reproducible choice.
+        """
+        eligible = (self._manifest['action'] != 'drop')
+        if not ignore_label_conflict:
+            eligible = eligible & ~self._manifest['label_conflict']
+        shuffled = self._manifest[eligible].sample(frac=1, random_state=np.random.default_rng(seed))
+        chosen = shuffled.drop_duplicates(subset=[column], keep='first').index
+        drop = eligible & ~self._manifest.index.isin(chosen)
+
+        self._manifest.loc[eligible & ~drop, 'action'] = 'keep'
+        self._manifest.loc[drop, 'action'] = 'drop'
+        self._manifest.loc[drop, 'reason'] = reason
+
+        if not ignore_label_conflict:
+            conflicting = self._manifest['label_conflict'] & (self._manifest['action'] != 'drop')
+            self._manifest.loc[conflicting, 'action'] = 'drop'
+            self._manifest.loc[conflicting, 'reason'] = 'Conflicting labels in group'
+
+        self.save_manifest()
+
     def keep_first_in_group(self, reason="duplicate", column='group_id', ignore_label_conflict=False):
         """
         Looks for images sharing a UUID group_id. Sets the first one to 'keep' 

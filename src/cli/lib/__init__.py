@@ -48,7 +48,7 @@ def group_by_hash(dataset: ImageDataset | ImageClassificationDataset):
     if groups:
         print(f"Grouping {sum(len(g) for g in groups)} images into {len(groups)} groups based on exact hash duplicates.")
         dataset.group(groups)
-        dataset.keep_first_in_group(reason="exact hash duplicates")
+        dataset.keep_random_in_group(reason="exact hash duplicates")
         print("Remaining images after grouping: ", len(dataset.df), "\n")
         
 def make_perceptual_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="phash"):
@@ -88,11 +88,11 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
         idx2idx = dataset.get_idx2idx()
         groups = [[idx2idx[idx] for idx in g] for g in groups]
         dataset.group(groups)
-        dataset.keep_first_in_group(reason="near-perceptual-hash duplicates")
+        dataset.keep_random_in_group(reason="near-perceptual-hash duplicates")
     else:
         print("No near duplicates found.")
 
-def make_general_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
+def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
     """
     make general embeddings for the dataset.
 
@@ -130,7 +130,7 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
     emb = dataset.load_embeddings(model_name=model_name)
     if emb is None:
         print("Embedding the full dataset...")
-        make_general_embeddings(dataset, model_name=model_name, batch_size=64)
+        make_embeddings(dataset, model_name=model_name, batch_size=64)
         emb = dataset.load_embeddings(model_name=model_name)
         
     device = get_device()
