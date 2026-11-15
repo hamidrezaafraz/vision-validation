@@ -143,13 +143,13 @@ class ImageDataset(TorchDataset):
             return np.load(hashes_path)
         return None
         
-    def keep_random_in_group(self, reason="duplicate", column='group_id', seed=None):
+    def keep_random_in_group(self, reason="duplicate", seed=None):
         """
-        Like keep_first_in_group, but the survivor of each group is picked at random
+        Like keep_first_in_group (group_id only), but the survivor of each group is picked at random
         among its non-dropped rows. Pass `seed` for a reproducible choice.
         """
         eligible = (self._manifest['action'] != 'drop')
-        chosen = self._pick_random_per_group(eligible, column, seed)
+        chosen = self._pick_random_per_group(eligible, seed)
         drop = eligible & ~self._manifest.index.isin(chosen)
 
         self._manifest.loc[eligible & ~drop, 'action'] = 'keep'
@@ -157,10 +157,10 @@ class ImageDataset(TorchDataset):
         self._manifest.loc[drop, 'reason'] = reason
         self.save_manifest()
 
-    def _pick_random_per_group(self, eligible, column, seed=None):
-        """Index labels of one randomly chosen eligible row per value of `column`."""
+    def _pick_random_per_group(self, eligible, seed=None):
+        """Index labels of one randomly chosen eligible row per group_id."""
         shuffled = self._manifest[eligible].sample(frac=1, random_state=np.random.default_rng(seed))
-        return shuffled.drop_duplicates(subset=[column], keep='first').index
+        return shuffled.drop_duplicates(subset=['group_id'], keep='first').index
 
     def keep_first_in_group(self, reason="duplicate", column='group_id'):
         """
@@ -317,9 +317,9 @@ class ImageClassificationDataset(TorchDataset):
             return np.load(hashes_path)
         return None
         
-    def keep_random_in_group(self, reason="duplicate", column='group_id', ignore_label_conflict=False, seed=None):
+    def keep_random_in_group(self, reason="duplicate", ignore_label_conflict=False, seed=None):
         """
-        Like keep_first_in_group, but the survivor of each group is picked at random
+        Like keep_first_in_group (group_id only), but the survivor of each group is picked at random
         among its eligible rows (not dropped, and without a label conflict unless
         ignore_label_conflict). Pass `seed` for a reproducible choice.
         """
@@ -327,7 +327,7 @@ class ImageClassificationDataset(TorchDataset):
         if not ignore_label_conflict:
             eligible = eligible & ~self._manifest['label_conflict']
         shuffled = self._manifest[eligible].sample(frac=1, random_state=np.random.default_rng(seed))
-        chosen = shuffled.drop_duplicates(subset=[column], keep='first').index
+        chosen = shuffled.drop_duplicates(subset=['group_id'], keep='first').index
         drop = eligible & ~self._manifest.index.isin(chosen)
 
         self._manifest.loc[eligible & ~drop, 'action'] = 'keep'
