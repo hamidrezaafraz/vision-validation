@@ -1,5 +1,5 @@
 
-from src.utils.dataset import ImageClassificationDataset, ImageDataset
+from src.utils.dataset import ImageClassificationDataset, ImageDataset, embedding_group_column
 from src.exact_duplicates.hashing import get_hash_hexdigest
 import numpy as np
 from src.near_duplicates.perceptual_hashes import get_perceptual_hashes, hamming_pairs
@@ -115,8 +115,9 @@ def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_na
 
 def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95):
     """
-    Verify near embeddings in the dataset (rows not dropped). Only merges the
-    'split_group' column; group_id, action and reason are left untouched.
+    Verify near embeddings in the dataset (rows not dropped). Merges the per-model
+    'group_<model>_<threshold>' column (e.g. group_alexnet_0_95) and 'split_group';
+    group_id, action and reason are left untouched.
 
     Parameters:
     - dataset: ImageClassificationDataset instance
@@ -143,6 +144,8 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
         print(f"Found {len(pairs)} close embeddings with similarity <= {threshold}, merged into {len(groups)} groups.")
         idx2idx = dataset.get_idx2idx()
         groups = [[idx2idx[idx] for idx in g] for g in groups]
+        # per-model column records which model linked the images; split_group takes the union
+        dataset.group(groups, column=embedding_group_column(model_name, threshold))
         dataset.group(groups, column='split_group')
         dataset.save_manifest()
     else:

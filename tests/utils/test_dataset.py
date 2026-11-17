@@ -5,7 +5,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from src.utils.dataset import ImageClassificationDataset, similar_pairs
+from src.utils.dataset import ImageClassificationDataset, embedding_group_column, similar_pairs
 
 RED, GREEN, BLUE = (255, 0, 0), (0, 255, 0), (0, 0, 255)
 
@@ -64,6 +64,51 @@ class TestGrouping:
         assert m.loc[0, "split_group"] == m.loc[1, "split_group"]
         assert m["group_id"].is_unique
         assert list(m["action"]) == ["keep"] * 4
+
+    def test_embedding_group_column_name(self):
+        assert embedding_group_column("alexnet", 0.95) == "group_alexnet_0_95"
+        assert embedding_group_column("facenet-vggface2", 0.9) == "group_facenet-vggface2_0_9"
+
+    def test_model_column_is_created_and_leaves_other_columns_alone(self, dataset):
+        col = embedding_group_column("alexnet", 0.95)
+        dataset.group([[0, 1]], column=col)
+        m = dataset._manifest
+        assert m.loc[0, col] == m.loc[1, col]
+        assert m[col].nunique() == 3
+        assert m["group_id"].is_unique
+        assert m["split_group"].is_unique
+
+    def test_rebuild_split_group_uses_only_listed_columns(self, dataset):
+        a, b = embedding_group_column("alexnet", 0.95), embedding_group_column("facenet", 0.9)
+        dataset.group([[0, 1]], column=a)
+        dataset.group([[1, 2]], column=b)
+        dataset.rebuild_split_group([a])
+        s = dataset._manifest["split_group"]
+        assert s[0] == s[1] and s[2] != s[0] and s.nunique() == 3
+        dataset.rebuild_split_group([a, b])  # chain 0-1-2 through both models
+        s = dataset._manifest["split_group"]
+        assert s[0] == s[1] == s[2] and s[3] != s[0]
+
+    def test_rebuild_split_group_includes_group_id_and_updates_label_conflict(self, dataset):
+        col = embedding_group_column("alexnet", 0.95)
+        dataset.group([[0, 1]])  # exact dup
+        dataset.group([[2, 3]], column=col)  # Happy + Sad
+        dataset.rebuild_split_group([col])
+        m = dataset._manifest
+        assert m.loc[0, "split_group"] == m.loc[1, "split_group"]
+        assert list(m["label_conflict"]) == [False, False, True, True]
+
+    def test_rebuild_split_group_unknown_column(self, dataset):
+        with pytest.raises(KeyError):
+            dataset.rebuild_split_group(["group_nope_0_5"])
+
+    def test_model_column_survives_reload(self, dataset, tmp_path):
+        col = embedding_group_column("alexnet", 0.95)
+        dataset.group([[0, 1]], column=col)
+        dataset.save_manifest()
+        reloaded = ImageClassificationDataset(dataset.root_dir, result_dir=str(tmp_path))
+        assert reloaded._manifest.loc[0, col] == reloaded._manifest.loc[1, col]
+        assert reloaded.group_columns() == [col]
 
     def test_label_conflict_flags_groups_with_mixed_labels(self, dataset):
         assert not dataset._manifest["label_conflict"].any()

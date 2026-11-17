@@ -16,7 +16,60 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
 
-class ImageDataset(TorchDataset):
+def embedding_group_column(model_name: str, threshold: float) -> str:
+    """Name of the per-model group column, e.g. ('alexnet', 0.95) -> 'group_alexnet_0_95'."""
+    return f"group_{model_name}_{str(threshold).replace('.', '_')}"
+
+
+class GroupColumnsMixin:
+    """Per-model group columns and the split_group rebuild shared by both dataset classes."""
+
+    def _ensure_group_column(self, column: str):
+        """Adds `column` with a unique UUID per row when it doesn't exist yet."""
+        if column not in self._manifest.columns:
+            self._manifest[column] = [str(uuid.uuid4()) for _ in range(len(self._manifest))]
+
+    def group_columns(self) -> list[str]:
+        """Per-model group columns currently in the manifest."""
+        return [c for c in self._manifest.columns if c.startswith('group_') and c != 'group_id']
+
+    def rebuild_split_group(self, columns=()):
+        """
+        Rebuilds 'split_group' from scratch as the union of 'group_id' and the given
+        per-model group columns: two rows end up in the same split_group when they share
+        a value in any of those columns (directly or through a chain). Columns not listed
+        no longer contribute, and merges made directly on split_group are discarded.
+        """
+        columns = ['group_id'] + [c for c in columns if c != 'group_id']
+        missing = [c for c in columns if c not in self._manifest.columns]
+        if missing:
+            raise KeyError(f"Unknown group columns: {missing}")
+
+        parent = list(range(len(self._manifest)))
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for col in columns:
+            first_of = {}
+            for pos, value in enumerate(self._manifest[col]):
+                if value in first_of:
+                    parent[find(pos)] = find(first_of[value])
+                else:
+                    first_of[value] = pos
+
+        ids = {}
+        self._manifest['split_group'] = [ids.setdefault(find(i), str(uuid.uuid4())) for i in range(len(parent))]
+        self._after_split_group_change()
+        self.save_manifest()
+
+    def _after_split_group_change(self):
+        pass
+
+
+class ImageDataset(GroupColumnsMixin, TorchDataset):
     def __init__(self, paths: list[str], result_dir, transform=None):
         self.result_dir = result_dir
         self.transform = transform
@@ -65,22 +118,6 @@ class ImageDataset(TorchDataset):
             return np.load(pairs_path)
         return None
         
-    def __group(self, exact_groups: list[list[int]], column: str = 'group_id'):
-        """
-        Merges each list of row indices into one new group in `column`.
-
-        'group_id' is the duplicate group (drives keep/drop). Merges there are mirrored
-        into 'split_group', so split_group is always at least as coarse as group_id.
-        'split_group' is only used for group-aware splitting and never drives keep/drop.
-        """
-        columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
-        for group in exact_groups:
-            for col in columns:
-                new_group_id = str(uuid.uuid4())
-                target_group_ids = self._manifest.loc[group, col].unique()
-                mask = self._manifest[col].isin(target_group_ids)
-                self._manifest.loc[mask, col] = new_group_id
-
     def group(self, exact_groups: list[list[int]], column: str = 'group_id', workers: int = 4):
             """
             Merges each list of row indices into one new group in `column`.
@@ -95,8 +132,11 @@ class ImageDataset(TorchDataset):
             """
             print(f"\nMerging {len(exact_groups)} groups into column '{column}' with {workers} workers...\n")
             columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
+            self._ensure_group_column(column)
+            
             if not exact_groups:
                 return
+            
             chunks = [exact_groups[i::workers] for i in range(workers)]
     
             for col in columns:
@@ -249,7 +289,7 @@ class ImageDataset(TorchDataset):
                 self._manifest.insert(3, 'split_group', self._manifest['group_id'])
                 self.save_manifest()
 
-class ImageClassificationDataset(TorchDataset):
+class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
     def __init__(self, root_dir, result_dir, transform=None):
         self.root_dir = root_dir
         self.result_dir = result_dir
@@ -285,12 +325,16 @@ class ImageClassificationDataset(TorchDataset):
         'split_group' is only used for group-aware splitting and never drives keep/drop.
         """
         columns = ['group_id', 'split_group'] if column == 'group_id' else [column]
+        self._ensure_group_column(column)
         for group in exact_groups:
             for col in columns:
                 new_group_id = str(uuid.uuid4())
                 target_group_ids = self._manifest.loc[group, col].unique()
                 mask = self._manifest[col].isin(target_group_ids)
                 self._manifest.loc[mask, col] = new_group_id
+        self.update_label_conflict()
+
+    def _after_split_group_change(self):
         self.update_label_conflict()
 
     def update_label_conflict(self):

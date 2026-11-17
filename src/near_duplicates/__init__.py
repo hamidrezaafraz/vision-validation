@@ -1,15 +1,16 @@
 import torch
 from src.near_duplicates.embeddings import get_embeddings, get_model, similar_pairs, get_transform, get_device
 from src.near_duplicates.perceptual_hashes import get_perceptual_hashes, hamming_pairs
-from src.utils.dataset import ImageClassificationDataset
+from src.utils.dataset import ImageClassificationDataset, embedding_group_column
 from torch.utils.data import Subset
 
 
 
 def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128, ignore_label_conflict=False):
     """
-    Verify near embeddings in the dataset (rows not dropped). Only merges the
-    'split_group' column; group_id, action and reason are left untouched.
+    Verify near embeddings in the dataset (rows not dropped). Merges the per-model
+    'group_<model>_<threshold>' column (e.g. group_alexnet_0_95) and 'split_group';
+    group_id, action and reason are left untouched.
 
     Parameters:
     - dataset: ImageClassificationDataset instance
@@ -45,6 +46,8 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
         for i, d in enumerate(pairs):
             pairs[i] = [idx2idx[idx] for idx in d]
         # embeddings only link images for splitting; they never decide keep/drop
+        # per-model column records which model linked the images; split_group takes the union
+        dataset.group(pairs, column=embedding_group_column(model_name, threshold))
         dataset.group(pairs, column='split_group')
         dataset.save_manifest()
     else:
