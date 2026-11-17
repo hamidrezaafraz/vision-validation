@@ -54,8 +54,9 @@ def group_by_hash(dataset: ImageDataset | ImageClassificationDataset):
 def make_perceptual_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="phash"):
     """Hashes all images in the dataset using perceptual hashing and saves the hashes
     in the manifest's '{hash_name}_perceptual_hash' column as hex strings (one per image)."""
-    H = get_perceptual_hashes(dataset._manifest['path'], hash_name)
-    dataset.save_perceptual_hashes(H, hash_name=hash_name)
+    df = dataset.df
+    H = get_perceptual_hashes(df['path'], hash_name)
+    dataset.save_perceptual_hashes(H, df.index, hash_name=hash_name)
 
 
 def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset, hash_name='phash', threshold=0):
@@ -71,17 +72,15 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
     - None
     """
     # Compute perceptual hashes for all images in the dataset
-    H = dataset.load_perceptual_hashes(hash_name=hash_name)
-    if H is None:
-        H = get_perceptual_hashes(dataset._manifest['path'], hash_name)
-        dataset.save_perceptual_hashes(H, hash_name=hash_name)
+    H, indices = dataset.load_perceptual_hashes(hash_name=hash_name)
+    df = dataset.df
+    if H is None or indices is None or len(H) != len(df) or not np.array_equal(indices, df.index.to_numpy()):
+        H = get_perceptual_hashes(df['path'], hash_name)
+        dataset.save_perceptual_hashes(H, df.index, hash_name=hash_name)
     
-    H = H[dataset.df.index]  # Ensure hashes are in the same order as the dataset
-
     # Find pairs of images with Hamming distance less than the threshold
     pairs = hamming_pairs(H, threshold)
     
-
     if len(pairs) > 0:
         groups = merge_pairs(pairs)
         print(f"Found {len(pairs)} pairs of near duplicates with Hamming distance <= {threshold}, merged into {len(groups)} groups.")

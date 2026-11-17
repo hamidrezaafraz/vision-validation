@@ -7,6 +7,7 @@ alex_reset_keep:
 
 data:
 	uv run main.py data --datadir="emotion/Data" --resultdir="emotion/results" \
+	--check_decode \
 	--group_hash \
 	--group_perceptual_hash --perceptual_hash phash --hamming_threshold=4 \
 	--group_embeddings --embedding_model_name alexnet --embedding_threshold 0.95 \

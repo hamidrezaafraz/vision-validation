@@ -6,6 +6,7 @@ from src.utils.dataset import ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
 from src.cli.lib import make_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
+from src.integrity import check_decode_and_exif
 
 def arg(help: str, group: str, default=MISSING, choices=None):
     """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
@@ -26,6 +27,7 @@ class DatasetArgs:
     """
     GROUPS: ClassVar[dict[str, str]] = {
         "Data": "Dataset-related options",
+        "Integrity": "Image file integrity and photometric quality checks",
         "Validation": "Dataset validation steps",
         "Exact hash duplicates": "Exact hash duplicate detection",
         "Exact byte-level duplicates": "Exact byte-level duplicate detection",
@@ -36,6 +38,8 @@ class DatasetArgs:
 
     datadir: str = arg("Root directory of the dataset", "Data")
     resultdir: str = arg("Root directory of the results", "Data")
+    num_workers: int = arg("Worker threads for parallel image I/O checks", "Data", default=8)
+    check_decode: bool = arg("Decode full pixel buffers and check EXIF orientation", "Integrity", default=False)
     restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
     
     make_hashes : bool = arg("Hash every image and store the hashes", "Exact hash duplicates", default=False)
@@ -94,15 +98,16 @@ def dataset_cli(args: argparse.Namespace):
     print(f"Validating dataset in \"{data_args.datadir}\"")
     print(f"Storing results in \"{data_args.resultdir}\"\n")
 
-    print(f"Validating images...")
-    image_paths = find_image_paths(data_args.datadir)
-    print(f"Found {len(image_paths)} valid images\n")
-
-    dataset = ImageDataset(image_paths, data_args.resultdir)
+    dataset = ImageDataset(data_args.datadir, data_args.resultdir)
 
     
     if data_args.restart:
         dataset.restart()
+    if data_args.check_decode:
+        check_decode_and_exif(
+            dataset,
+            num_workers=data_args.num_workers,
+        )
     if data_args.make_hashes:
         make_hashes(dataset)
     if data_args.group_hash:

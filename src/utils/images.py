@@ -23,6 +23,6 @@ def find_image_paths(root_dir: str) -> list[str]:
     for dirpath, _, filenames in os.walk(root_dir):
         for name in filenames:
             path = os.path.join(dirpath, name)
-            if is_valid_image(path):
+            if os.path.isfile(path):
                 paths.append(path)
     return sorted(paths)

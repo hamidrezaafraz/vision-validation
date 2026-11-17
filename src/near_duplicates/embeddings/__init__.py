@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from tqdm import tqdm
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import torch.nn.functional as F
 from facenet_pytorch import InceptionResnetV1
@@ -74,9 +74,10 @@ def get_model(model_name:str = "alexnet", device:str = "cpu"):
 
     return model.to(device).eval()
 
-def get_embeddings(model, sub_ds, batch_size, device="cpu"):
+def get_embeddings(model, dataset, batch_size, device="cpu"):
     # Placeholder for the actual implementation of get_embeddings
     feats = []
+    sub_ds = Subset(dataset, dataset.df.index)  
     dataloader = DataLoader(sub_ds, batch_size=batch_size, shuffle=False)
     with torch.no_grad():
         for samples in tqdm(dataloader, desc="Computing features"):

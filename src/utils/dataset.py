@@ -3,6 +3,7 @@ import uuid
 
 import numpy as np
 import os
+from src.utils.images import find_image_paths
 from src.utils.logger import Logger
 import json
 import torch
@@ -70,10 +71,14 @@ class GroupColumnsMixin:
 
 
 class ImageDataset(GroupColumnsMixin, TorchDataset):
-    def __init__(self, paths: list[str], result_dir, transform=None):
+    def __init__(self, data_dir, result_dir, transform=None):
         self.result_dir = result_dir
         self.transform = transform
-        self.paths = paths
+        
+        
+        self.paths = find_image_paths(data_dir)
+        print(f"Found {len(self.paths)} files\n")
+        
         self._embeddings_dir = os.path.join(self.result_dir, "embeddings")
         if not os.path.exists(self._embeddings_dir):
             os.makedirs(self._embeddings_dir, exist_ok=True)
@@ -163,7 +168,9 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
     
                 new_ids = {}
                 mapping = {old: new_ids.setdefault(find(old), str(uuid.uuid4())) for old in list(parent)}
-                self._manifest[col] = series.map(lambda v: mapping.get(v, v))      
+                self._manifest[col] = series.map(lambda v: mapping.get(v, v))     
+                
+                 
     def save_embeddings(self, embeddings, model_name):
         embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
         np.save(embeddings_path, embeddings)
@@ -173,25 +180,29 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
         if os.path.exists(embeddings_path):
             return np.load(embeddings_path)
         return None
-    def save_perceptual_hashes(self, hashes, hash_name):
-        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
-        np.save(hashes_path, hashes)
     
+    def save_perceptual_hashes(self, indices, hashes, hash_name):
+        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
+        hash_indices_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes_indices.npy")
+        np.save(hashes_path, hashes)
+        np.save(hash_indices_path, indices)
+
     def load_perceptual_hashes(self, hash_name):
         hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
-        if os.path.exists(hashes_path):
-            return np.load(hashes_path)
-        return None
+        hash_indices_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes_indices.npy")
+        if os.path.exists(hashes_path) and os.path.exists(hash_indices_path):
+            return np.load(hashes_path), np.load(hash_indices_path)
+        return None, None
         
     def keep_random_in_group(self, reason="duplicate", seed=None):
         """
         Like keep_first_in_group (group_id only), but the survivor of each group is picked at random
         among its non-dropped rows. Pass `seed` for a reproducible choice.
         """
-        eligible = (self._manifest['action'] != 'drop')
+        eligible = ((self._manifest['action'] != 'drop') & self._manifest['action'] != 'review')
         chosen = self._pick_random_per_group(eligible, seed)
         drop = eligible & ~self._manifest.index.isin(chosen)
-
+        
         self._manifest.loc[eligible & ~drop, 'action'] = 'keep'
         self._manifest.loc[drop, 'action'] = 'drop'
         self._manifest.loc[drop, 'reason'] = reason
@@ -245,7 +256,7 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
         self.save_manifest()
         
     def get_idx2idx(self):
-        return {i: idx for i, idx in enumerate(self.df.index)}
+        return {i: idx for i, idx in enumerate(self._manifest[self._manifest['action'] != 'drop'].index)}
     
     @property
     def df(self):
@@ -269,9 +280,10 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
 
     def load_manifest(self, path=None):
         if path is None:
+            # is_decodable	exif_orientation
             path = self._manifest_path
         if not os.path.exists(path):
-            self._manifest = pd.DataFrame(columns=["path", "group_id", "split_group", "action", "reason"])
+            self._manifest = pd.DataFrame(columns=["path", "group_id", "split_group", "action", "reason", "is_decodable", "exif_orientation"])
             dataset_len = len(self.paths)
             self._manifest["path"] = self.paths
             self._manifest["group_id"] = [str(uuid.uuid4()) for _ in range(dataset_len)]
@@ -282,7 +294,7 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
         else:
             self._manifest = pd.read_csv(
                 path, 
-                dtype={'group_id':str,'split_group':str,'action': str, 'reason': str},
+                dtype={'group_id':str,'split_group':str,'action': str, 'reason': str, 'is_decodable': bool, 'exif_orientation': int},
                 keep_default_na=False  # Prevents empty strings from being converted to NaN
             )
             if 'split_group' not in self._manifest.columns:  # manifest from before split_group existed
