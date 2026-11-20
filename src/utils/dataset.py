@@ -505,5 +505,5 @@ def apply_policy(df: pd.DataFrame, mask: pd.Series, policy: str, tag: str) -> No
     if policy == "drop":
         df.loc[mask, "action"] = "drop"
     elif policy == "review":
-        df.loc[mask & (df["action"] == "keep"), "action"] = "review"
+        df.loc[mask & (df["action"] != "drop"), "action"] = "review"
     df.loc[mask, "reason"] = append_reason(df.loc[mask, "reason"], tag)
