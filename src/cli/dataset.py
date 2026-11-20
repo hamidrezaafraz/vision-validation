@@ -6,7 +6,7 @@ from src.utils.dataset import ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
 from src.cli.lib import make_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
-from src.integrity import check_decode_and_exif
+from src.integrity import check_decode
 
 def arg(help: str, group: str, default=MISSING, choices=None):
     """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
@@ -40,6 +40,27 @@ class DatasetArgs:
     resultdir: str = arg("Root directory of the results", "Data")
     num_workers: int = arg("Worker threads for parallel image I/O checks", "Data", default=8)
     check_decode: bool = arg("Decode full pixel buffers and check EXIF orientation", "Integrity", default=False)
+    check_format: bool = arg("Validate image color modes, channel counts, and bit-depths", "Integrity", default=False)
+    expected_modes: tuple = arg(
+        "Allowed Pillow image modes (e.g., RGB L RGBA)",
+        "Integrity",
+        default=("RGB",),
+        choices=["RGB", "L", "RGBA", "CMYK", "P", "LA", "1", "I;16", "I", "F"],
+    )
+    expected_dtypes: tuple = arg(
+        "Allowed NumPy pixel dtypes (e.g., uint8 uint16)",
+        "Integrity",
+        default=("uint8",),
+        choices=["uint8", "uint16", "int32", "float32", "bool"],
+    )
+    format_mismatch_policy: str = arg(
+        "Action when color mode or bit-depth mismatches ('review' or 'drop')",
+        "Integrity",
+        default="review",
+        choices=["review", "drop"],
+    )
+    
+    
     restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
     
     make_hashes : bool = arg("Hash every image and store the hashes", "Exact hash duplicates", default=False)
@@ -97,16 +118,20 @@ def dataset_cli(args: argparse.Namespace):
     
     print(f"Validating dataset in \"{data_args.datadir}\"")
     print(f"Storing results in \"{data_args.resultdir}\"\n")
-
+       
     dataset = ImageDataset(data_args.datadir, data_args.resultdir)
 
     
     if data_args.restart:
         dataset.restart()
     if data_args.check_decode:
-        check_decode_and_exif(
+        check_decode(
             dataset,
+            check_format=data_args.check_format,
             num_workers=data_args.num_workers,
+            expected_modes=data_args.expected_modes,
+            expected_dtypes=data_args.expected_dtypes,
+            on_mismatch=data_args.format_mismatch_policy
         )
     if data_args.make_hashes:
         make_hashes(dataset)

@@ -134,7 +134,7 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
         dataset.save_embeddings(emb, model_name=model_name)
         
     device = get_device()
-    emb = emb[dataset.df.index]  # Ensure embeddings are in the same order as the dataset
+
     emb = torch.tensor(emb)
     pairs = similar_pairs(emb, thr=threshold, device=device)
 
