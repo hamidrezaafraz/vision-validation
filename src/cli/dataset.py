@@ -39,7 +39,7 @@ class DatasetArgs:
     datadir: str = arg("Root directory of the dataset", "Data")
     resultdir: str = arg("Root directory of the results", "Data")
     num_workers: int = arg("Worker threads for parallel image I/O checks", "Data", default=8)
-    check_decode: bool = arg("Decode full pixel buffers, check EXIF orientation, and validate color modes and bit-depths", "Integrity", default=False)
+    check_decode: bool = arg("Decode full pixel buffers, check EXIF orientation, validate color modes and bit-depths, and check width, height and aspect ratio", "Integrity", default=False)
     expected_modes: tuple = arg(
         "Allowed Pillow image modes (e.g., RGB L RGBA)",
         "Integrity",
@@ -54,6 +54,17 @@ class DatasetArgs:
     )
     format_mismatch_policy: str = arg(
         "Action when color mode or bit-depth mismatches ('review' or 'drop')",
+        "Integrity",
+        default="review",
+        choices=["review", "drop"],
+    )
+    min_width: int = arg("Minimum allowed image width in pixels", "Integrity", default=32)
+    min_height: int = arg("Minimum allowed image height in pixels", "Integrity", default=32)
+    max_width: int = arg("Maximum allowed image width in pixels", "Integrity", default=8192)
+    max_height: int = arg("Maximum allowed image height in pixels", "Integrity", default=8192)
+    max_aspect_ratio: float = arg("Maximum allowed symmetric aspect ratio max(w/h, h/w)", "Integrity", default=5.0)
+    dimension_violation_policy: str = arg(
+        "Action when resolution or aspect ratio exceeds bounds ('review' or 'drop')",
         "Integrity",
         default="review",
         choices=["review", "drop"],
@@ -129,7 +140,13 @@ def dataset_cli(args: argparse.Namespace):
             num_workers=data_args.num_workers,
             expected_modes=data_args.expected_modes,
             expected_dtypes=data_args.expected_dtypes,
-            on_mismatch=data_args.format_mismatch_policy
+            on_mismatch=data_args.format_mismatch_policy,
+            min_width=data_args.min_width,
+            min_height=data_args.min_height,
+            max_width=data_args.max_width,
+            max_height=data_args.max_height,
+            max_aspect_ratio=data_args.max_aspect_ratio,
+            on_dimension_violation=data_args.dimension_violation_policy,
         )
     if data_args.make_hashes:
         make_hashes(dataset)

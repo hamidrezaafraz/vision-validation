@@ -496,7 +496,8 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
 
 def append_reason(series: pd.Series, tag: str) -> pd.Series:
     """Appends a semicolon-delimited failure tag without duplicating existing tags."""
-    return series.apply(lambda r: tag if not r else (r if tag in r.split(";") else f"{r};{tag}"))
+    return series.fillna("").apply(lambda r: tag if not r else (r if tag in r.split(";") else f"{r};{tag}"))
+ 
 
 def apply_policy(df: pd.DataFrame, mask: pd.Series, policy: str, tag: str) -> None:
     """Applies 'drop' or 'review' without downgrading an existing 'drop' to 'review'."""
