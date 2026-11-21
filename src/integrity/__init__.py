@@ -89,7 +89,6 @@ def _inspect_single_image(path: str | Path) -> DecodeResult:
 def check_decode(
     dataset: ImageDataset | ImageClassificationDataset,
     path_col: str = "path",
-    check_format: bool = True,
     expected_modes: tuple[str, ...] = ("RGB",),
     expected_dtypes: tuple[str, ...] = ("uint8",),
     on_mismatch: str = "review",
@@ -100,8 +99,8 @@ def check_decode(
 
     - Undecodable files are dropped with reason 'corrupt'.
     - Files with a non-default EXIF orientation are marked 'review' with reason 'exif_rotated'.
-    - If check_format is set, files whose color mode or dtype is not in the expected
-      lists get the 'on_mismatch' action ('review' or 'drop').
+    - Files whose color mode or dtype is not in the expected lists get the
+      'on_mismatch' action ('review' or 'drop').
 
     Existing 'drop' actions are never downgraded and existing reasons are appended to,
     not overwritten. The manifest is saved, and the updated non-dropped rows are returned.
@@ -114,17 +113,16 @@ def check_decode(
         results = list(pool.map(_inspect_single_image, df[path_col]))
     inspected = pd.DataFrame([asdict(r) for r in results], index=df.index)
 
-    new_columns = DECODE_COLUMNS + (FORMAT_COLUMNS if check_format else [])
+    new_columns = DECODE_COLUMNS + FORMAT_COLUMNS
     df[new_columns] = inspected[new_columns]
 
     decodable = inspected["is_decodable"]
     apply_policy(df, ~decodable, "drop", "corrupt")
     apply_policy(df, decodable & (inspected["exif_orientation"] != DEFAULT_ORIENTATION), "review", "exif_rotated")
 
-    if check_format:
-        # Undecodable rows are already dropped, so only check the decodable ones.
-        apply_policy(df, decodable & ~inspected["color_mode"].isin(expected_modes), on_mismatch, "unexpected_color_mode")
-        apply_policy(df, decodable & ~inspected["dtype"].isin(expected_dtypes), on_mismatch, "unexpected_bit_depth")
+    # Undecodable rows are already dropped, so only check the decodable ones.
+    apply_policy(df, decodable & ~inspected["color_mode"].isin(expected_modes), on_mismatch, "unexpected_color_mode")
+    apply_policy(df, decodable & ~inspected["dtype"].isin(expected_dtypes), on_mismatch, "unexpected_bit_depth")
 
     for row in inspected.loc[~decodable].itertuples():
         logger.warning(f"Cannot decode {row.path}: {row.error}")

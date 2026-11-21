@@ -39,8 +39,7 @@ class DatasetArgs:
     datadir: str = arg("Root directory of the dataset", "Data")
     resultdir: str = arg("Root directory of the results", "Data")
     num_workers: int = arg("Worker threads for parallel image I/O checks", "Data", default=8)
-    check_decode: bool = arg("Decode full pixel buffers and check EXIF orientation", "Integrity", default=False)
-    check_format: bool = arg("Validate image color modes, channel counts, and bit-depths", "Integrity", default=False)
+    check_decode: bool = arg("Decode full pixel buffers, check EXIF orientation, and validate color modes and bit-depths", "Integrity", default=False)
     expected_modes: tuple = arg(
         "Allowed Pillow image modes (e.g., RGB L RGBA)",
         "Integrity",
@@ -127,7 +126,6 @@ def dataset_cli(args: argparse.Namespace):
     if data_args.check_decode:
         check_decode(
             dataset,
-            check_format=data_args.check_format,
             num_workers=data_args.num_workers,
             expected_modes=data_args.expected_modes,
             expected_dtypes=data_args.expected_dtypes,
