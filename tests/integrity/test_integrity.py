@@ -96,3 +96,12 @@ class TestCheckDecode:
         dataset = make_sized_dataset({"ok": (64, 64)})
         with pytest.raises(ValueError, match="min dimensions"):
             check_decode(dataset, min_width=100, max_width=50)
+
+
+class TestDecodeErrorColumn:
+    def test_corrupt_file_records_decode_error(self, make_sized_dataset, tmp_path):
+        dataset = make_sized_dataset({"ok": (64, 64), "bad": (64, 64)})
+        (tmp_path / "Data" / "Happy" / "bad.png").write_bytes(b"not an image")
+        df = check_decode(dataset)
+        assert _row(df, "ok")["decode_error"] == ""
+        assert _row(df, "bad")["decode_error"].startswith("UnidentifiedImageError")

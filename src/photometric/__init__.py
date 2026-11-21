@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageFile, UnidentifiedImageError
@@ -24,7 +25,9 @@ PHOTOMETRIC_COLUMNS = [
 ]
 
 
-BLUR_REF_MAX_SIDE = 512
+BLUR_REF_MAX_SIDE = 256
+# 4-neighbour discrete Laplacian. It is symmetric, so filter2D's correlation equals convolution.
+LAPLACIAN_KERNEL = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float32)
 
 
 @dataclass(frozen=True)
@@ -51,9 +54,12 @@ def _extract_normalized_rgb_or_gray(img: Image.Image) -> np.ndarray:
     if img.mode == "1":
         return np.asarray(img, dtype=np.float32)
 
-    if img.mode in ("RGBA", "LA"):
+    if img.mode == "RGBA":
         # Drop alpha channel so transparent regions don't bias brightness/contrast
         arr = np.asarray(img)[..., :-1]
+    elif img.mode == "LA":
+        # Index (not slice) the luminance band so the result is 2D (H, W), not (H, W, 1).
+        arr = np.asarray(img)[..., 0]
     elif img.mode in ("P", "PA", "CMYK", "YCbCr", "HSV"):
         arr = np.asarray(img.convert("RGB"))
     else:
@@ -85,14 +91,10 @@ def _compute_laplacian_variance(norm: np.ndarray) -> float:
     if gray.shape[0] < 3 or gray.shape[1] < 3:
         return 0.0
 
-    lap = (
-        gray[:-2, 1:-1]
-        + gray[2:, 1:-1]
-        + gray[1:-1, :-2]
-        + gray[1:-1, 2:]
-        - 4.0 * gray[1:-1, 1:-1]
-    )
-    return float(lap.var())
+    # Border pixels are cropped so only full neighbourhoods count, rather than ones padded
+    # by OpenCV's border reflection.
+    lap = cv2.filter2D(np.ascontiguousarray(gray, dtype=np.float32), cv2.CV_32F, LAPLACIAN_KERNEL)
+    return float(lap[1:-1, 1:-1].var())
 
 
 def _inspect_single_photometric(

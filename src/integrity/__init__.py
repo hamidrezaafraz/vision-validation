@@ -33,7 +33,7 @@ class DecodeResult:
     path: str
     is_decodable: bool
     exif_orientation: int
-    error: str
+    decode_error: str
 
     color_mode: str
     num_channels: int
@@ -52,7 +52,7 @@ class DecodeResult:
             path=path,
             is_decodable=False,
             exif_orientation=-1,
-            error=f"{type(exc).__name__}: {exc}",
+            decode_error=f"{type(exc).__name__}: {exc}",
             color_mode="invalid",
             num_channels=0,
             dtype="invalid",
@@ -100,7 +100,7 @@ def _inspect_single_image(path: str | Path) -> DecodeResult:
                 path=path,
                 is_decodable=True,
                 exif_orientation=orientation,
-                error="",
+                decode_error="",
                 color_mode=img.mode,
                 num_channels=len(bands),
                 dtype=str(arr.dtype),

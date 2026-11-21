@@ -12,6 +12,7 @@ dependencies = [
     "jupyterlab-widgets>=3.0.17",
     "kagglehub>=1.0.2",
     "matplotlib>=3.10.9",
+    "opencv-python-headless>=5.1.0.95",
     "pandas>=2.3.3",
     "questionary>=2.1.1",
     "scikit-learn>=1.7.2",
