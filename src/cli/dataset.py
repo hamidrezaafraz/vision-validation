@@ -2,6 +2,7 @@ import argparse
 from dataclasses import MISSING, dataclass, field, fields
 from typing import ClassVar
 
+from src.photometric import check_photometric
 from src.utils.dataset import ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
@@ -65,6 +66,17 @@ class DatasetArgs:
     max_aspect_ratio: float = arg("Maximum allowed symmetric aspect ratio max(w/h, h/w)", "Integrity", default=5.0)
     dimension_violation_policy: str = arg(
         "Action when resolution or aspect ratio exceeds bounds ('review' or 'drop')",
+        "Integrity",
+        default="review",
+        choices=["review", "drop"],
+    )
+    
+    check_photometric: bool = arg("Check for blank frames, extreme exposure, and blur", "Integrity", default=False)
+    min_pixel_std: float = arg("Minimum normalized pixel std in [0, 1] before flagging blank/solid frames", "Integrity", default=0.02)
+    max_clip_ratio: float = arg("Maximum fraction of near-black or near-white pixels before flagging exposure", "Integrity", default=0.90)
+    min_blur_score: float = arg("Minimum Laplacian variance on <=512px luminance before flagging blur", "Integrity", default=40.0)
+    photometric_violation_policy: str = arg(
+        "Action when photometric quality fails ('review' or 'drop')",
         "Integrity",
         default="review",
         choices=["review", "drop"],
@@ -147,6 +159,15 @@ def dataset_cli(args: argparse.Namespace):
             max_height=data_args.max_height,
             max_aspect_ratio=data_args.max_aspect_ratio,
             on_dimension_violation=data_args.dimension_violation_policy,
+        )
+    if data_args.check_photometric:
+        check_photometric(
+            dataset,
+            min_std=data_args.min_pixel_std,
+            max_clip_ratio=data_args.max_clip_ratio,
+            min_blur_score=data_args.min_blur_score,
+            on_violation=data_args.photometric_violation_policy,
+            num_workers=data_args.num_workers,
         )
     if data_args.make_hashes:
         make_hashes(dataset)

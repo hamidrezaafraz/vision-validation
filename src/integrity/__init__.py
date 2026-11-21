@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageFile, UnidentifiedImageError
 
-from src.utils.dataset import ImageClassificationDataset, ImageDataset, apply_policy
+from src.utils.dataset import ImageClassificationDataset, ImageDataset, apply_policy, write_back
 from src.utils.logger import Logger
 
 logger = Logger(__name__)
@@ -25,12 +25,7 @@ DIMENSION_COLUMNS = ["width", "height", "aspect_ratio", "megapixels"]
 DECODE_COLUMNS = ["is_decodable", "exif_orientation", "decode_error"]
 DECODE_ERRORS = (UnidentifiedImageError, OSError, SyntaxError, ValueError, TypeError, Image.DecompressionBombError)
 
-NULLABLE_DTYPES = {
-    "bool": "boolean",
-    "int64": "Int64",
-    "float64": "Float64",
-    "object": "string",
-}
+
 
 
 @dataclass(frozen=True)
@@ -179,22 +174,8 @@ def check_decode(
     apply_policy(df, too_large, on_dimension_violation, "too_large")
     apply_policy(df, extreme_ratio, on_dimension_violation, "extreme_aspect_ratio")
 
-    _write_back(dataset, df, new_columns)
+    write_back(dataset, df, new_columns)
     return df
 
 
-def _write_back(dataset: ImageDataset | ImageClassificationDataset, df: pd.DataFrame, new_columns: list[str]) -> None:
-    """Copies the checked rows back into the full manifest and saves it.
-
-    New columns are created first: assigning through .loc aligns on column names,
-    so columns missing from the manifest would otherwise be silently discarded.
-    """
-    manifest = dataset._manifest
-    for col in new_columns:
-        if col not in manifest.columns:
-            target_dtype = NULLABLE_DTYPES.get(str(df[col].dtype), "object")
-            manifest[col] = pd.Series(pd.NA, index=manifest.index, dtype=target_dtype)
-    columns = ["action", "reason", *new_columns]
-    manifest.loc[df.index, columns] = df[columns]
-    dataset.save_manifest()
 

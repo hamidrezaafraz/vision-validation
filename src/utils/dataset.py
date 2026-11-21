@@ -508,3 +508,26 @@ def apply_policy(df: pd.DataFrame, mask: pd.Series, policy: str, tag: str) -> No
     elif policy == "review":
         df.loc[mask & (df["action"] != "drop"), "action"] = "review"
     df.loc[mask, "reason"] = append_reason(df.loc[mask, "reason"], tag)
+
+
+NULLABLE_DTYPES = {
+    "bool": "boolean",
+    "int64": "Int64",
+    "float64": "Float64",
+    "object": "string",
+}
+
+def write_back(dataset: ImageDataset | ImageClassificationDataset, df: pd.DataFrame, new_columns: list[str]) -> None:
+    """Copies the checked rows back into the full manifest and saves it.
+
+    New columns are created first: assigning through .loc aligns on column names,
+    so columns missing from the manifest would otherwise be silently discarded.
+    """
+    manifest = dataset._manifest
+    for col in new_columns:
+        if col not in manifest.columns:
+            target_dtype = NULLABLE_DTYPES.get(str(df[col].dtype), "object")
+            manifest[col] = pd.Series(pd.NA, index=manifest.index, dtype=target_dtype)
+    columns = ["action", "reason", *new_columns]
+    manifest.loc[df.index, columns] = df[columns]
+    dataset.save_manifest()
