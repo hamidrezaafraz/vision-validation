@@ -12,10 +12,18 @@ from src.utils.logger import Logger
 
 logger = Logger(__name__)
 
+# Make Pillow raise OSError on truncated files instead of silently padding the missing part
+# with gray, which would distort brightness and blur stats without anyone noticing.
 ImageFile.LOAD_TRUNCATED_IMAGES = False
 
+# Allowed values for on_violation. 'review' only marks a row for a human to look at; 'drop'
+# removes it from the dataset. There is no 'keep', because a check that flags nothing need not run.
 MISMATCH_POLICIES = ("review", "drop")
+# Pillow raises different exception types depending on the format plugin, so all of them mean
+# "this file could not be read" here. Such rows get NaN stats and are never flagged by this check;
+# reporting corrupt files is check_decode's job.
 DECODE_ERRORS = (UnidentifiedImageError, OSError, SyntaxError, ValueError, TypeError, Image.DecompressionBombError)
+# Manifest columns written by check_photometric, one per PhotometricResult field.
 PHOTOMETRIC_COLUMNS = [
     "mean_brightness",
     "pixel_std",
@@ -25,8 +33,32 @@ PHOTOMETRIC_COLUMNS = [
 ]
 
 
+# Longest side, in pixels, that the luminance plane is shrunk to before measuring blur.
+# Why: Laplacian variance depends on resolution. In a 24 MP photo a sharp edge spans several
+# pixels, so neighbouring pixels differ little and the score is low even when the photo is in
+# focus. Shrinking large images to a common size puts their scores on one scale, so a single
+# min_blur_score works for all of them, and judges sharpness at roughly the scale a model sees.
+# Why 256: close to common training input sizes (224 for ImageNet-style models), so blur that
+# disappears at this size would not matter in training anyway.
+# Caveat: images smaller than this are NOT enlarged, so the 48x48 crops (most of emotion/Data)
+# are measured at their own size and are not on exactly the same scale as shrunk photos.
+# Changing this value changes every blur score, so re-pick min_blur_score afterwards.
 BLUR_REF_MAX_SIDE = 256
-# 4-neighbour discrete Laplacian. It is symmetric, so filter2D's correlation equals convolution.
+# Longest side, in pixels, above which an image is shrunk while decoding (see _load_downscaled).
+# After shrinking, the longest side is between this and about 2x this.
+# Why: brightness, contrast and clipping stats were computed on full-resolution float arrays.
+# For a 24 MP photo that costs ~1 GB of memory and ~0.5 s, and with 8 worker threads on an
+# 8 GB machine the whole check took 443 s instead of 18 s.
+# Why 1024: on the 247 photos over 10 MP in emotion/Data, shrinking to this size moved
+# mean_brightness by at most 0.0007, pixel_std by 0.013 and the clip ratios by 0.04, and no image
+# changed flags. It must stay well above BLUR_REF_MAX_SIDE, so the blur plane is still made
+# by shrinking from a sharper image rather than from one already near its final size.
+STATS_MAX_SIDE = 1024
+# 4-neighbour discrete Laplacian: 4 x (average of the up/down/left/right neighbours - the pixel). Flat and smoothly changing areas give ~0 and sharp edges give large values,
+# so the variance of the result is high for sharp images and low for blurry ones.
+# Why this kernel: it is the standard one for the "variance of the Laplacian" blur measure, and
+# it is the smallest, so it reacts to the finest detail. It is symmetric, so filter2D's
+# correlation equals convolution.
 LAPLACIAN_KERNEL = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float32)
 
 
@@ -71,8 +103,32 @@ def _extract_normalized_rgb_or_gray(img: Image.Image) -> np.ndarray:
     return np.clip(arr.astype(np.float32), 0.0, 1.0)
 
 
+def _load_downscaled(img: Image.Image, max_side: int = STATS_MAX_SIDE) -> Image.Image:
+    """Loads the image shrunk so its longest side is between max_side and 2 * max_side.
+
+    Smaller images are loaded unchanged. For JPEGs, draft() makes the decoder itself output a
+    1/2, 1/4 or 1/8 scale image, which also skips most of the decoding work. For other formats,
+    or if the draft is still too large, reduce() averages integer-sized pixel blocks.
+    Must be called before the image is loaded.
+    """
+    if max(img.size) <= max_side:
+        img.load()
+        return img
+
+    img.draft(img.mode, (max_side, max_side))  # no-op for non-JPEG formats
+    img.load()
+
+    factor = max(img.size) // max_side
+    if factor > 1:
+        try:
+            img = img.reduce(factor)
+        except ValueError:  # modes like "1" and "P" can't be block-averaged; keep full size
+            pass
+    return img
+
+
 def _compute_laplacian_variance(norm: np.ndarray) -> float:
-    """Computes discrete 2D Laplacian variance on a <=512px luminance plane."""
+    """Computes discrete 2D Laplacian variance on a luminance plane shrunk to <= BLUR_REF_MAX_SIDE px."""
     if norm.ndim == 2:
         gray_01 = norm
     else:
@@ -108,8 +164,7 @@ def _inspect_single_photometric(
 
     try:
         with Image.open(str(path)) as img:
-            img.load()
-            norm = _extract_normalized_rgb_or_gray(img)
+            norm = _extract_normalized_rgb_or_gray(_load_downscaled(img))
     except DECODE_ERRORS:
         return PhotometricResult.invalid()
 
@@ -133,12 +188,31 @@ def _inspect_single_photometric(
 
 def check_photometric(
     dataset: ImageDataset | ImageClassificationDataset,
+    # Manifest column that holds the image file paths.
     path_col: str = "path",
+    # Pixel std (values in [0, 1]) below which an image counts as blank or a solid color.
+    # 0.02 is about 5 gray levels out of 255: only near-uniform frames like a black screen or
+    # a placeholder fall below it, while even a low-contrast face is far above it.
+    # In emotion/Data the 1st percentile is 0.10, and 24 images fall below 0.02.
     min_std: float = 0.02,
+    # Fraction of pixels allowed to be clipped (within clip_margin of pure black or pure white)
+    # before an image counts as under- or overexposed. 0.90 means almost the whole frame has
+    # lost its detail. Ordinary dark or bright photos, or a face on a white background, stay below it.
+    # In emotion/Data the 99th percentile is ~0.25 for both, and 4 images are flagged underexposed.
     max_clip_ratio: float = 0.90,
+    # How close to 0 or 1 a value must be to count as clipped. 0.02 means values <= 5 or >= 250
+    # out of 255: a small margin so JPEG noise around pure black/white still counts as clipped.
     clip_margin: float = 0.02,
+    # Laplacian variance (on 0-255 values, at BLUR_REF_MAX_SIDE) below which an image counts as blurry.
+    # 40 is a rough rule of thumb, not calibrated on this dataset. In emotion/Data the median is
+    # ~1950 and the 1st percentile ~165, so 40 only catches extreme cases (19 images).
+    # The score depends on BLUR_REF_MAX_SIDE, so re-pick this whenever that changes.
     min_blur_score: float = 40.0,
+    # 'review' by default: a low-quality image is not necessarily a wrong one, so flagged images
+    # are kept for a human to look at rather than removed automatically.
     on_violation: str = "review",
+    # Threads that read images in parallel. Decoding releases the GIL, so threads help, and 8
+    # matches the core count of the machine this was tuned on.
     num_workers: int = 8,
 ) -> pd.DataFrame:
     """

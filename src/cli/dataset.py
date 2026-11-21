@@ -74,7 +74,7 @@ class DatasetArgs:
     check_photometric: bool = arg("Check for blank frames, extreme exposure, and blur", "Integrity", default=False)
     min_pixel_std: float = arg("Minimum normalized pixel std in [0, 1] before flagging blank/solid frames", "Integrity", default=0.02)
     max_clip_ratio: float = arg("Maximum fraction of near-black or near-white pixels before flagging exposure", "Integrity", default=0.90)
-    min_blur_score: float = arg("Minimum Laplacian variance on <=512px luminance before flagging blur", "Integrity", default=40.0)
+    min_blur_score: float = arg("Minimum Laplacian variance on luminance shrunk to <=256px before flagging blur", "Integrity", default=40.0)
     photometric_violation_policy: str = arg(
         "Action when photometric quality fails ('review' or 'drop')",
         "Integrity",
