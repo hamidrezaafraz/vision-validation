@@ -3,7 +3,7 @@ from dataclasses import MISSING, dataclass, field, fields
 from typing import ClassVar
 
 from src.photometric import check_photometric
-from src.utils.dataset import ImageDataset
+from src.utils.dataset import GROUP_KEEP_STRATEGIES, ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
 from src.cli.lib import make_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
@@ -84,6 +84,13 @@ class DatasetArgs:
     
     
     restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
+    group_keep_strategy: str = arg(
+        "How the one image kept from each duplicate group is picked; the others are flagged 'drop'",
+        "Validation",
+        default="random",
+        choices=list(GROUP_KEEP_STRATEGIES),
+    )
+    group_keep_seed: int = arg("Seed for --group_keep_strategy random, for a reproducible choice (default: unseeded)", "Validation", default=None)
     
     make_hashes : bool = arg("Hash every image and store the hashes", "Exact hash duplicates", default=False)
     group_hash: bool = arg("Group images with identical file hashes (hashes them first if needed)", "Exact hash duplicates", default=False)
@@ -123,7 +130,7 @@ class DatasetArgs:
             elif f.default is MISSING:
                 kwargs.update(type=f.type, required=True)
             else:
-                kwargs.update(type=f.type, default=f.default)
+                kwargs.update(type=f.type, default=f.default, choices=f.metadata["choices"])
             groups[f.metadata["group"]].add_argument(f"--{f.name}", **kwargs)
         return parser
 
@@ -172,11 +179,17 @@ def dataset_cli(args: argparse.Namespace):
     if data_args.make_hashes:
         make_hashes(dataset)
     if data_args.group_hash:
-        group_by_hash(dataset)
+        group_by_hash(dataset, group_keep_strategy=data_args.group_keep_strategy, seed=data_args.group_keep_seed)
     if data_args.make_perceptual_hashes:
         make_perceptual_hashes(dataset, hash_name=data_args.perceptual_hash)
     if data_args.group_perceptual_hash:
-        group_by_perceptual_hash(dataset, hash_name=data_args.perceptual_hash, threshold=data_args.hamming_threshold)
+        group_by_perceptual_hash(
+            dataset,
+            hash_name=data_args.perceptual_hash,
+            threshold=data_args.hamming_threshold,
+            group_keep_strategy=data_args.group_keep_strategy,
+            seed=data_args.group_keep_seed,
+        )
         
     if data_args.make_general_embeddings:
         if not dataset.has_hash():

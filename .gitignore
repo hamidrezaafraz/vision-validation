@@ -21,3 +21,4 @@ emotion/*
 ./emotion
 .pytest_cache
 notebooks
+points.md

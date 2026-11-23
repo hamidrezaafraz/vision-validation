@@ -34,8 +34,9 @@ def make_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="b
     )
     dataset.save_manifest()
 
-def group_by_hash(dataset: ImageDataset | ImageClassificationDataset):
-    """Groups images that share the same file hash using dataset.group. Hashes first if needed."""
+def group_by_hash(dataset: ImageDataset | ImageClassificationDataset, group_keep_strategy="random", seed=None):
+    """Groups images that share the same file hash using dataset.group, then keeps one image per
+    group (picked by group_keep_strategy) and tags the rest 'exact_duplicate'. Hashes first if needed."""
     if not dataset.has_hash():
         print("Hashing images before grouping...")
         make_hashes(dataset)
@@ -48,7 +49,7 @@ def group_by_hash(dataset: ImageDataset | ImageClassificationDataset):
     if groups:
         print(f"Grouping {sum(len(g) for g in groups)} images into {len(groups)} groups based on exact hash duplicates.")
         dataset.group(groups)
-        dataset.keep_random_in_group(reason="exact hash duplicates")
+        dataset.keep_one_from_group(reason="exact_duplicate", group_keep_strategy=group_keep_strategy, seed=seed)
         print("Remaining images after grouping: ", len(dataset.df), "\n")
         
 def make_perceptual_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="phash"):
@@ -59,7 +60,7 @@ def make_perceptual_hashes(dataset: ImageDataset | ImageClassificationDataset, h
     dataset.save_perceptual_hashes(H, df.index, hash_name=hash_name)
 
 
-def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset, hash_name='phash', threshold=0):
+def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset, hash_name='phash', threshold=0, group_keep_strategy="random", seed=None):
     """
     Verify near duplicates in the dataset using perceptual hashes.
 
@@ -67,6 +68,8 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
     - dataset: ImageClassificationDataset instance
     - hash_name: str, name of the hash function (default: 'phash')
     - threshold: int, Hamming distance threshold for considering images as near duplicates
+    - group_keep_strategy: str, how the one kept image per group is picked (see GROUP_KEEP_STRATEGIES)
+    - seed: int or None, makes the 'random' strategy reproducible
 
     Returns:
     - None
@@ -87,7 +90,7 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
         idx2idx = dataset.get_idx2idx()
         groups = [[idx2idx[idx] for idx in g] for g in groups]
         dataset.group(groups)
-        dataset.keep_random_in_group(reason="near-perceptual-hash duplicates")
+        dataset.keep_one_from_group(reason=f"near_duplicate_{hash_name}_{threshold}", group_keep_strategy=group_keep_strategy, seed=seed)
     else:
         print("No near duplicates found.")
 

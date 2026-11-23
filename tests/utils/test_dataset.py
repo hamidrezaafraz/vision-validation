@@ -5,7 +5,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from src.utils.dataset import ImageClassificationDataset, embedding_group_column, similar_pairs
+from src.near_duplicates.embeddings import similar_pairs
+from src.utils.dataset import ImageClassificationDataset, ImageDataset, apply_policy, embedding_group_column
 
 RED, GREEN, BLUE = (255, 0, 0), (0, 255, 0), (0, 0, 255)
 
@@ -139,26 +140,26 @@ class TestGrouping:
         dataset.keep_first_in_group(reason="perceptual dup")
         assert list(dataset._manifest["reason"]) == ["", "exact dup", "perceptual dup", ""]
 
-    def test_keep_random_in_group_keeps_exactly_one_per_group(self, dataset):
+    def test_keep_one_from_group_keeps_exactly_one_per_group(self, dataset):
         dataset.group([[0, 1, 2]])
-        dataset.keep_random_in_group(reason="dup", seed=0)
+        dataset.keep_one_from_group(reason="dup", seed=0)
         m = dataset._manifest
         assert list(m["action"]).count("keep") == 2  # one of the group + the singleton
         assert m.loc[3, "action"] == "keep"
         assert list(m.loc[:2, "action"]).count("keep") == 1
         assert set(m.loc[m["action"] == "drop", "reason"]) == {"dup"}
 
-    def test_keep_random_in_group_is_reproducible_and_not_always_first(self, dataset):
+    def test_keep_one_from_group_is_reproducible_and_not_always_first(self, dataset):
         winners = set()
         for seed in range(20):
             dataset.restart()
             dataset.group([[0, 1, 2]])
-            dataset.keep_random_in_group(seed=seed)
+            dataset.keep_one_from_group(seed=seed)
             winners.add(tuple(dataset._manifest["action"][:3]))
         assert len(winners) > 1
-        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_random_in_group(seed=3)
+        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_one_from_group(seed=3)
         first = list(dataset._manifest["action"])
-        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_random_in_group(seed=3)
+        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_one_from_group(seed=3)
         assert list(dataset._manifest["action"]) == first
 
     def test_df_excludes_dropped_rows(self, dataset):
@@ -170,6 +171,88 @@ class TestGrouping:
         dataset.update_group_ids([0, 3], ["a", "b"])
         assert dataset._manifest.loc[0, "group_id"] == "a"
         assert dataset._manifest.loc[3, "group_id"] == "b"
+
+
+@pytest.fixture
+def unlabeled_dataset(make_image_folder, tmp_path):
+    """4 unlabeled images: rows 0 and 1 are identical, the rest are unique."""
+    root = make_image_folder({"Happy": [RED, RED, GREEN], "Sad": [BLUE]})
+    return ImageDataset(root, result_dir=str(tmp_path))
+
+
+class TestKeepOneFromGroup:
+    def test_keeps_exactly_one_per_group(self, unlabeled_dataset):
+        unlabeled_dataset.group([[0, 1, 2]])
+        unlabeled_dataset.keep_one_from_group(reason="exact_duplicate", seed=0)
+        m = unlabeled_dataset._manifest
+        assert list(m.loc[:2, "action"]).count("keep") == 1
+        assert list(m.loc[:2, "action"]).count("drop") == 2
+        assert m.loc[3, "action"] == "keep"
+        assert set(m.loc[m["action"] == "drop", "reason"]) == {"exact_duplicate"}
+
+    def test_appends_to_existing_reason(self, unlabeled_dataset):
+        m = unlabeled_dataset._manifest
+        m.loc[[0, 1], "reason"] = "blurry"
+        unlabeled_dataset.group([[0, 1]])
+        unlabeled_dataset.keep_one_from_group(reason="exact_duplicate", seed=0)
+        dropped = m.loc[[0, 1]][m.loc[[0, 1], "action"] == "drop"]
+        kept = m.loc[[0, 1]][m.loc[[0, 1], "action"] == "keep"]
+        assert list(dropped["reason"]) == ["blurry;exact_duplicate"]
+        assert list(kept["reason"]) == ["blurry"]
+
+    def test_tag_is_not_added_twice(self, unlabeled_dataset):
+        unlabeled_dataset._manifest.loc[1, "reason"] = "exact_duplicate"
+        unlabeled_dataset.group([[0, 1]])
+        unlabeled_dataset.keep_one_from_group(reason="exact_duplicate", seed=0)
+        assert "exact_duplicate;exact_duplicate" not in set(unlabeled_dataset._manifest["reason"])
+
+    def test_leaves_dropped_and_review_rows_untouched(self, unlabeled_dataset):
+        m = unlabeled_dataset._manifest
+        apply_policy(m, m.index == 0, "drop", "corrupt")
+        apply_policy(m, m.index == 1, "review", "exif_rotated")
+        unlabeled_dataset.group([[0, 1, 2]])
+        unlabeled_dataset.keep_one_from_group(reason="exact_duplicate", seed=0)
+        assert list(m.loc[:2, "action"]) == ["drop", "review", "keep"]
+        assert list(m.loc[:2, "reason"]) == ["corrupt", "exif_rotated", ""]
+
+    def test_same_seed_gives_same_choice(self, unlabeled_dataset):
+        actions = []
+        for _ in range(2):
+            unlabeled_dataset.restart()
+            unlabeled_dataset.group([[0, 1, 2]])
+            unlabeled_dataset.keep_one_from_group(seed=3)
+            actions.append(list(unlabeled_dataset._manifest["action"]))
+        assert actions[0] == actions[1]
+
+    def test_saves_manifest(self, unlabeled_dataset, tmp_path):
+        unlabeled_dataset.group([[0, 1]])
+        unlabeled_dataset.keep_one_from_group(reason="exact_duplicate", seed=0)
+        reloaded = ImageDataset(unlabeled_dataset_root(tmp_path), result_dir=str(tmp_path))
+        assert list(reloaded._manifest["action"]) == list(unlabeled_dataset._manifest["action"])
+
+
+class TestSelectOnePerGroup:
+    def test_unknown_strategy_raises(self, unlabeled_dataset):
+        eligible = unlabeled_dataset._manifest["action"] != "drop"
+        with pytest.raises(ValueError, match="group_keep_strategy"):
+            unlabeled_dataset._select_one_per_group(eligible, group_keep_strategy="sharpest")
+
+    def test_returns_one_index_per_group(self, unlabeled_dataset):
+        unlabeled_dataset.group([[0, 1, 2]])
+        eligible = unlabeled_dataset._manifest["action"] != "drop"
+        chosen = unlabeled_dataset._select_one_per_group(eligible, "random", seed=0)
+        assert len(chosen) == 2
+        assert 3 in chosen
+
+    def test_ignores_ineligible_rows(self, unlabeled_dataset):
+        unlabeled_dataset.group([[0, 1]])
+        eligible = unlabeled_dataset._manifest.index != 0
+        chosen = unlabeled_dataset._select_one_per_group(eligible, "random", seed=0)
+        assert 0 not in chosen and 1 in chosen
+
+
+def unlabeled_dataset_root(tmp_path):
+    return str(tmp_path / "Data")
 
 
 class TestSimilarPairs:

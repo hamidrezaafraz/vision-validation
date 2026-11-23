@@ -17,6 +17,10 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
 
+# How keep_one_from_group picks the survivor of each duplicate group.
+GROUP_KEEP_STRATEGIES = ("random",)
+
+
 def embedding_group_column(model_name: str, threshold: float) -> str:
     """Name of the per-model group column, e.g. ('alexnet', 0.95) -> 'group_alexnet_0_95'."""
     return f"group_{model_name}_{str(threshold).replace('.', '_')}"
@@ -68,6 +72,20 @@ class GroupColumnsMixin:
 
     def _after_split_group_change(self):
         pass
+
+    def _select_one_per_group(self, eligible: pd.Series, group_keep_strategy: str = "random", seed=None) -> pd.Index:
+        """
+        Index labels of the one eligible row per group_id that should survive.
+
+        - 'random': picks uniformly at random among the group's eligible rows; `seed` makes it reproducible.
+        """
+        # TODO: add select by sorting blurness and width and height
+        if group_keep_strategy not in GROUP_KEEP_STRATEGIES:
+            raise ValueError(f"group_keep_strategy must be one of {GROUP_KEEP_STRATEGIES}, got {group_keep_strategy!r}")
+        candidates = self._manifest[eligible]
+        if group_keep_strategy == "random":
+            candidates = candidates.sample(frac=1, random_state=np.random.default_rng(seed))
+        return candidates.drop_duplicates(subset=['group_id'], keep='first').index
 
 
 class ImageDataset(GroupColumnsMixin, TorchDataset):
@@ -194,67 +212,28 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
             return np.load(hashes_path), np.load(hash_indices_path)
         return None, None
         
-    def keep_random_in_group(self, reason="duplicate", seed=None):
+    def keep_one_from_group(self, reason="duplicate", group_keep_strategy="random", seed=None):
         """
-        Like keep_first_in_group (group_id only), but the survivor of each group is picked at random
-        among its non-dropped rows. Pass `seed` for a reproducible choice.
+        Within each group_id, marks one eligible row 'keep' and the other eligible rows 'drop',
+        appending `reason` to their existing reason tags (earlier tags are never lost).
+
+        Eligible rows are those not already 'drop' or 'review'. `group_keep_strategy` picks
+        which row survives (see GROUP_KEEP_STRATEGIES). Pass `seed` for a reproducible choice.
         """
         eligible = (self._manifest['action'] != 'drop') & (self._manifest['action'] != 'review')
-        chosen = self._pick_random_per_group(eligible, seed)
+        chosen = self._select_one_per_group(eligible, group_keep_strategy, seed)
         drop = eligible & ~self._manifest.index.isin(chosen)
-        
+
         self._manifest.loc[eligible & ~drop, 'action'] = 'keep'
         self._manifest.loc[drop, 'action'] = 'drop'
-        self._manifest.loc[drop, 'reason'] = reason
-        self.save_manifest()
-
-    def _pick_random_per_group(self, eligible, seed=None):
-        """Index labels of one randomly chosen eligible row per group_id."""
-        shuffled = self._manifest[eligible].sample(frac=1, random_state=np.random.default_rng(seed))
-        return shuffled.drop_duplicates(subset=['group_id'], keep='first').index
-
-    def keep_first_in_group(self, reason="duplicate", column='group_id'):
-        """
-        Looks for images sharing a UUID group_id. Sets the first one to 'keep' 
-        and the rest to 'drop' with the provided reason.
-        """
-        eligable = (self._manifest['action'] != 'drop')
-        is_duplicate = self._manifest.duplicated(subset=[column], keep='first')
-        
-        
-        self._manifest.loc[~is_duplicate & eligable, 'action'] = 'keep'
-        self._manifest.loc[is_duplicate & eligable, 'action'] = 'drop'
-        self._manifest.loc[is_duplicate & eligable, 'reason'] = reason
-        
-        
-        self.save_manifest()
-        
-    def keep_first_in_split_group(self, reason="split group duplicate"):
-        """
-        Within each split_group, keeps the first non-dropped row and drops the rest,
-        but only for groups without a label conflict. Rows in conflicting groups are
-        left untouched, so different-label items (e.g. same person, other expression) survive.
-        """
-        eligible = (self._manifest['action'] != 'drop')
-        is_duplicate = (
-            self._manifest[eligible]
-            .duplicated(subset=['split_group'], keep='first')
-            .reindex(self._manifest.index, fill_value=False)
-            .astype(bool)
-        )
-        first = eligible & ~is_duplicate
-
-        self._manifest.loc[first & (self._manifest['action'] == ''), 'action'] = 'keep'
-        self._manifest.loc[is_duplicate, 'action'] = 'drop'
-        no_reason = self._manifest['reason'] == ''
-        self._manifest.loc[is_duplicate & no_reason, 'reason'] = reason
+        self._manifest.loc[drop, 'reason'] = append_reason(self._manifest.loc[drop, "reason"], reason)
         self.save_manifest()
 
     def update_group_ids(self, indices, assigned_group_ids):
         for index, group_id in zip(indices, assigned_group_ids):
             self._manifest.loc[index, 'group_id'] = group_id
         self.save_manifest()
-        
+
     def get_idx2idx(self):
         return {i: idx for i, idx in enumerate(self._manifest[self._manifest['action'] != 'drop'].index)}
     
@@ -375,27 +354,27 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
             return np.load(hashes_path)
         return None
         
-    def keep_random_in_group(self, reason="duplicate", ignore_label_conflict=False, seed=None):
+    def keep_one_from_group(self, reason="duplicate", group_keep_strategy="random", ignore_label_conflict=False, seed=None):
         """
-        Like keep_first_in_group (group_id only), but the survivor of each group is picked at random
-        among its eligible rows (not dropped, and without a label conflict unless
-        ignore_label_conflict). Pass `seed` for a reproducible choice.
+        Within each group_id, marks one eligible row 'keep' and the other eligible rows 'drop'.
+        Eligible rows are not dropped and, unless ignore_label_conflict, have no label conflict.
+        `group_keep_strategy` picks the survivor (see GROUP_KEEP_STRATEGIES); pass `seed` for
+        a reproducible choice. Reasons are appended, so earlier tags are never lost.
         """
         eligible = (self._manifest['action'] != 'drop')
         if not ignore_label_conflict:
             eligible = eligible & ~self._manifest['label_conflict']
-        shuffled = self._manifest[eligible].sample(frac=1, random_state=np.random.default_rng(seed))
-        chosen = shuffled.drop_duplicates(subset=['group_id'], keep='first').index
+        chosen = self._select_one_per_group(eligible, group_keep_strategy, seed)
         drop = eligible & ~self._manifest.index.isin(chosen)
 
         self._manifest.loc[eligible & ~drop, 'action'] = 'keep'
         self._manifest.loc[drop, 'action'] = 'drop'
-        self._manifest.loc[drop, 'reason'] = reason
+        self._manifest.loc[drop, 'reason'] = append_reason(self._manifest.loc[drop, 'reason'], reason)
 
         if not ignore_label_conflict:
             conflicting = self._manifest['label_conflict'] & (self._manifest['action'] != 'drop')
             self._manifest.loc[conflicting, 'action'] = 'drop'
-            self._manifest.loc[conflicting, 'reason'] = 'Conflicting labels in group'
+            self._manifest.loc[conflicting, 'reason'] = append_reason(self._manifest.loc[conflicting, 'reason'], 'label_conflict')
 
         self.save_manifest()
 
