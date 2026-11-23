@@ -7,7 +7,6 @@ from src.report.validate import (
     ERROR,
     WARNING,
     ManifestValidationError,
-    is_duplicate_tag,
     raise_for_errors,
     validate_manifest,
 )
@@ -122,6 +121,45 @@ class TestValidateManifest:
         issue = only(validate_manifest(manifest), "ok_with_reason")
         assert issue.severity == WARNING and issue.count == 1
 
+    def test_unknown_tag(self, manifest):
+        manifest.loc[2, ["action", "reason"]] = ["review", "blurry;too_dark"]
+        manifest["blur_score"] = ["", "", "3.0"]
+        issue = only(validate_manifest(manifest), "unknown_tag")
+        assert issue.severity == ERROR and "'too_dark'" in issue.message
+        assert issue.examples == [manifest.loc[2, "path"]]
+
+    def test_legacy_and_parameterized_tags_are_known(self, manifest):
+        manifest.loc[1, "reason"] = "exact hash duplicates"
+        manifest.loc[2, ["action", "reason"]] = ["drop", "near_duplicate_phash_4"]
+        manifest.loc[2, "group_id"] = "g0"
+        assert "unknown_tag" not in codes(validate_manifest(manifest))
+
+    def test_missing_metric_column(self, manifest):
+        manifest.loc[2, ["action", "reason"]] = ["review", "blurry"]
+        issue = only(validate_manifest(manifest), "missing_metric_column")
+        assert issue.severity == ERROR and "'blur_score'" in issue.message and "column is missing" in issue.message
+        assert issue.examples == [manifest.loc[2, "path"]]
+
+    @pytest.mark.parametrize("empty", ["", float("nan"), None])
+    def test_empty_metric_value(self, manifest, empty):
+        manifest["width"] = [48.0, 48.0, 48.0]
+        manifest["height"] = [48.0, 48.0, 48.0]
+        manifest.loc[2, ["action", "reason"]] = ["review", "too_small"]
+        manifest["width"] = manifest["width"].astype(object)
+        manifest.loc[2, "width"] = empty
+        issues = [i for i in validate_manifest(manifest) if i.code == "missing_metric_column"]
+        assert [("'width'" in i.message, "value is empty" in i.message) for i in issues] == [(True, True)]
+
+    def test_metric_present_is_valid(self, manifest):
+        manifest["blur_score"] = ["", "", "3.0"]
+        manifest.loc[2, ["action", "reason"]] = ["review", "blurry"]
+        assert "missing_metric_column" not in codes(validate_manifest(manifest))
+
+    def test_one_issue_per_missing_column(self, manifest):
+        manifest.loc[2, ["action", "reason"]] = ["review", "too_small;extreme_aspect_ratio"]
+        issues = [i for i in validate_manifest(manifest) if i.code == "missing_metric_column"]
+        assert sorted(i.message.split("need ")[1].split(",")[0] for i in issues) == ["'aspect_ratio'", "'height'", "'width'"]
+
     def test_examples_are_capped(self, manifest):
         big = pd.concat([manifest.iloc[[2]]] * 30, ignore_index=True)
         big["action"] = "Keep"
@@ -143,16 +181,6 @@ class TestValidateManifest:
         assert validate_manifest(dataset._manifest, data_dir=folder) == []
 
 
-class TestIsDuplicateTag:
-    @pytest.mark.parametrize("tag", ["exact_duplicate", "byte_duplicate", "near_duplicate_phash_4", "near_duplicate_alexnet_0_95", "exact hash duplicates"])
-    def test_duplicate_tags(self, tag):
-        assert is_duplicate_tag(tag)
-
-    @pytest.mark.parametrize("tag", ["corrupt", "blurry", "", "duplicate"])
-    def test_other_tags(self, tag):
-        assert not is_duplicate_tag(tag)
-
-
 class TestRaiseForErrors:
     def test_raises_on_errors_with_all_codes(self, manifest):
         manifest.loc[2, "action"] = "Keep"
@@ -163,6 +191,7 @@ class TestRaiseForErrors:
         assert "unknown_action" in str(exc.value)
 
     def test_warnings_do_not_raise(self, manifest):
+        manifest["exif_orientation"] = [1, 1, 6]
         manifest.loc[2, "reason"] = "exif_rotated"
         issues = validate_manifest(manifest)
         assert issues and all(i.severity == WARNING for i in issues)

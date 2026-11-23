@@ -212,7 +212,7 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
             return np.load(hashes_path), np.load(hash_indices_path)
         return None, None
         
-    def keep_one_from_group(self, reason="duplicate", group_keep_strategy="random", seed=None):
+    def keep_one_from_group(self, reason: str, group_keep_strategy="random", seed=None):
         """
         Within each group_id, marks one eligible row 'keep' and the other eligible rows 'drop',
         appending `reason` to their existing reason tags (earlier tags are never lost).
@@ -354,7 +354,7 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
             return np.load(hashes_path)
         return None
         
-    def keep_one_from_group(self, reason="duplicate", group_keep_strategy="random", ignore_label_conflict=False, seed=None):
+    def keep_one_from_group(self, reason: str, group_keep_strategy="random", ignore_label_conflict=False, seed=None):
         """
         Within each group_id, marks one eligible row 'keep' and the other eligible rows 'drop'.
         Eligible rows are not dropped and, unless ignore_label_conflict, have no label conflict.
@@ -378,7 +378,7 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
 
         self.save_manifest()
 
-    def keep_first_in_group(self, reason="duplicate", column='group_id', ignore_label_conflict=False):
+    def keep_first_in_group(self, reason: str, column='group_id', ignore_label_conflict=False):
         """
         Looks for images sharing a UUID group_id. Sets the first one to 'keep' 
         and the rest to 'drop' with the provided reason.
@@ -400,7 +400,7 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
         
         self.save_manifest()
         
-    def keep_first_in_split_group(self, reason="split group duplicate"):
+    def keep_first_in_split_group(self, reason: str):
         """
         Within each split_group, keeps the first non-dropped row and drops the rest,
         but only for groups without a label conflict. Rows in conflicting groups are

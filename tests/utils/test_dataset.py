@@ -154,17 +154,17 @@ class TestGrouping:
         for seed in range(20):
             dataset.restart()
             dataset.group([[0, 1, 2]])
-            dataset.keep_one_from_group(seed=seed)
+            dataset.keep_one_from_group("exact_duplicate", seed=seed)
             winners.add(tuple(dataset._manifest["action"][:3]))
         assert len(winners) > 1
-        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_one_from_group(seed=3)
+        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_one_from_group("exact_duplicate", seed=3)
         first = list(dataset._manifest["action"])
-        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_one_from_group(seed=3)
+        dataset.restart(); dataset.group([[0, 1, 2]]); dataset.keep_one_from_group("exact_duplicate", seed=3)
         assert list(dataset._manifest["action"]) == first
 
     def test_df_excludes_dropped_rows(self, dataset):
         dataset.group([[0, 1]])
-        dataset.keep_first_in_group()
+        dataset.keep_first_in_group("exact_duplicate")
         assert list(dataset.df.index) == [0, 2, 3]
 
     def test_update_group_ids(self, dataset):
@@ -220,7 +220,7 @@ class TestKeepOneFromGroup:
         for _ in range(2):
             unlabeled_dataset.restart()
             unlabeled_dataset.group([[0, 1, 2]])
-            unlabeled_dataset.keep_one_from_group(seed=3)
+            unlabeled_dataset.keep_one_from_group("exact_duplicate", seed=3)
             actions.append(list(unlabeled_dataset._manifest["action"]))
         assert actions[0] == actions[1]
 

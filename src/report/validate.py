@@ -6,7 +6,8 @@ run, an older run's manifest against a changed folder, a bug in a check), those 
 wrong. So every invariant below is checked first, and errors stop the report (see raise_for_errors).
 
 Severities:
-- 'error': the numbers cannot be trusted (unknown actions, flags without a reason, duplicate paths,
+- 'error': the numbers cannot be trusted (unknown actions, flags without a reason, tags missing from
+  the catalog in src/report/reasons.py, tags without the metric that explains them, duplicate paths,
   missing files, files that were never scanned, missing required columns).
 - 'warning': the numbers are right, but something is worth a look before they go out (a duplicate
   copy whose representative was later dropped, a duplicate group with several unflagged members,
@@ -19,25 +20,13 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from src.report.reasons import get_reason, is_duplicate_tag, parse_tags
 from src.report.status import ACTION_TO_STATUS, DROP, OK
 from src.utils.images import find_image_paths
 
 ERROR, WARNING = "error", "warning"
 REQUIRED_COLUMNS = ("path", "group_id", "action", "reason")
 MAX_EXAMPLES = 20
-
-# Tags written by the duplicate steps. The current snake_case tags are matched by prefix, because
-# near-duplicate tags carry the hash/model and threshold (e.g. 'near_duplicate_phash_4'). The free-text
-# tags are what manifests written before todo 17 contain.
-# TODO: move to the reason-tag catalog (todo 20).
-DUPLICATE_TAG_PREFIXES = ("exact_duplicate", "byte_duplicate", "near_duplicate")
-LEGACY_DUPLICATE_TAGS = (
-    "exact hash duplicates",
-    "exact byte-level duplicates",
-    "near duplicates",
-    "near-perceptual-hash duplicates",
-)
-
 
 @dataclass(frozen=True)
 class Issue:
@@ -60,14 +49,6 @@ class ManifestValidationError(ValueError):
 def _issue(code: str, severity: str, message: str, paths: pd.Series | list) -> Issue:
     paths = list(paths)
     return Issue(code, severity, message, count=len(paths), examples=[str(p) for p in paths[:MAX_EXAMPLES]])
-
-
-def _tags(reason: str) -> list[str]:
-    return [t for t in reason.split(";") if t] if reason else []
-
-
-def is_duplicate_tag(tag: str) -> bool:
-    return tag.startswith(DUPLICATE_TAG_PREFIXES) or tag in LEGACY_DUPLICATE_TAGS
 
 
 def _resolve(path: str, base_dir: str) -> str:
@@ -106,6 +87,9 @@ def validate_manifest(manifest: pd.DataFrame, data_dir: str | None = None, base_
     if flagged_without_reason.any():
         issues.append(_issue("flag_without_reason", ERROR, "Rows flagged 'review' or 'drop' without a reason", path[flagged_without_reason]))
 
+    tags = reason.map(parse_tags)
+    issues.extend(_tag_issues(manifest, tags))
+
     duplicated_path = path.duplicated(keep=False)
     if duplicated_path.any():
         issues.append(_issue("duplicate_path", ERROR, "Paths that appear in more than one row", path[duplicated_path].drop_duplicates()))
@@ -121,7 +105,7 @@ def validate_manifest(manifest: pd.DataFrame, data_dir: str | None = None, base_
         if unscanned:
             issues.append(_issue("unscanned_file", ERROR, f"Files under {data_dir!r} that are not in the manifest", unscanned))
 
-    issues.extend(_group_issues(manifest, status, reason))
+    issues.extend(_group_issues(manifest, status, tags))
 
     unflagged_with_reason = (status == OK) & (reason.str.strip() != "")
     if unflagged_with_reason.any():
@@ -130,12 +114,44 @@ def validate_manifest(manifest: pd.DataFrame, data_dir: str | None = None, base_
     return issues
 
 
-def _group_issues(manifest: pd.DataFrame, status: pd.Series, reason: pd.Series) -> list[Issue]:
+def _is_blank(values: pd.Series) -> pd.Series:
+    return values.isna() | (values.astype(str).str.strip() == "")
+
+
+def _tag_issues(manifest: pd.DataFrame, tags: pd.Series) -> list[Issue]:
+    """Every tag is in the catalog, and every row carrying a tag has a value in the columns that explain it."""
+    issues = []
+    path = manifest["path"]
+    exploded = tags.explode().dropna()
+
+    unknown = exploded[~exploded.map(lambda t: get_reason(t) is not None)]
+    if not unknown.empty:
+        values = sorted(map(repr, unknown.unique()))
+        issues.append(_issue("unknown_tag", ERROR, f"Rows with reason tags missing from the catalog (src/report/reasons.py): {', '.join(values)}", path[unknown.index.unique()]))
+
+    # One issue per column, naming the tags that need it. A missing column and an empty cell are the
+    # same problem: the report cannot show why the row was flagged.
+    needs: dict[str, set] = {}
+    for idx, tag in exploded.items():
+        entry = get_reason(tag)
+        for col in entry.columns if entry else ():
+            needs.setdefault(col, set()).add(idx)
+    for col, rows in sorted(needs.items()):
+        rows = manifest.index[manifest.index.isin(rows)]
+        lacking = rows if col not in manifest.columns else rows[_is_blank(manifest.loc[rows, col]).to_numpy()]
+        if len(lacking):
+            tag_names = sorted({get_reason(t).tag for t in exploded.loc[lacking] if get_reason(t) and col in get_reason(t).columns})
+            where = "column is missing" if col not in manifest.columns else "value is empty"
+            issues.append(_issue("missing_metric_column", ERROR, f"Rows tagged {tag_names} need {col!r}, but the {where}", path[lacking]))
+    return issues
+
+
+def _group_issues(manifest: pd.DataFrame, status: pd.Series, tags: pd.Series) -> list[Issue]:
     """Duplicate-group invariants on group_id."""
     issues = []
     path, group_id = manifest["path"], manifest["group_id"]
     not_dropped = status.notna() & (status != DROP)
-    has_duplicate_tag = reason.map(lambda r: any(is_duplicate_tag(t) for t in _tags(r)))
+    has_duplicate_tag = tags.map(lambda ts: any(is_duplicate_tag(t) for t in ts))
 
     # A copy dropped as a duplicate must have a surviving member in its group to stand for it.
     # This breaks when a check that runs after deduplication (e.g. check_decode) drops the representative.
