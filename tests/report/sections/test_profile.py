@@ -17,6 +17,7 @@ from src.report.sections.profile import (
     numeric_column,
     numeric_distributions,
     relative_folders,
+    relative_paths,
     threshold_sensitivity,
     top_resolutions,
 )
@@ -284,3 +285,13 @@ class TestDatasetProfile:
         section = dataset_profile(manifest, str(tmp_path))
         assert section["total_images"] == 0
         json.dumps(section, allow_nan=False)
+
+
+class TestRelativePaths:
+    def test_relative_to_data_dir(self, delivery):
+        manifest, data = delivery
+        assert relative_paths(manifest, data).tolist() == ["a/1.png", "a/2.jpg", "b/c/3.jpg", "4.png"]
+
+    def test_resolves_against_base_dir(self, tmp_path):
+        manifest = make_manifest([{"path": "data/a/1.png"}])
+        assert relative_paths(manifest, str(tmp_path / "data"), base_dir=str(tmp_path)).tolist() == ["a/1.png"]

@@ -13,6 +13,9 @@ from src.report.exports import (
     ok_manifest,
     primary_tag,
     remove_exports,
+    tag_metric,
+    tag_severity,
+    worst_first_key,
     representatives,
     review_manifest,
     row_severity,
@@ -57,10 +60,52 @@ class TestRowTags:
         assert row_tags("exact_duplicate;blurry;corrupt") == ["corrupt", "blurry", "exact_duplicate"]
         assert row_tags("exact hash duplicates;exact_duplicate") == ["exact_duplicate"]
 
-    def test_primary_tag_and_severity(self):
-        assert (primary_tag("blurry;too_small"), row_severity("blurry;too_small")) == ("too_small", "warning")
-        assert (primary_tag(""), row_severity("")) == ("", "")
-        assert row_severity("made_up") == "unknown"
+    def test_empty(self):
+        assert row_tags("") == [] and row_tags(float("nan")) == []
+
+
+class TestTagSeverity:
+    def test_catalog_and_unknown(self):
+        assert tag_severity("corrupt") == "error" and tag_severity("blurry") == "warning"
+        assert tag_severity("near_duplicate_phash_4") == "info" and tag_severity("made_up") == "unknown"
+
+
+class TestPrimaryTag:
+    def test_most_serious_tag(self):
+        assert primary_tag("blurry;too_small") == "too_small"  # same severity: catalog order
+        assert primary_tag("exact_duplicate;corrupt") == "corrupt"
+        assert primary_tag("") == ""
+
+
+class TestRowSeverity:
+    def test_severity_of_primary_tag(self):
+        assert row_severity("exact_duplicate;blurry") == "warning"
+        assert row_severity("made_up") == "unknown" and row_severity("") == ""
+
+
+class TestTagMetric:
+    def test_single_and_combined_columns(self, manifest):
+        rows = manifest.loc[[3, 5]]
+        assert tag_metric(rows, "blurry")[0] == "blur_score"
+        assert tag_metric(rows, "blurry")[1].tolist() == [38.0, 5.0]
+        name, values = tag_metric(rows, "too_small")
+        assert name == "min(width,height)" and values.tolist() == [64.0, 20.0]
+
+    def test_no_metric(self, manifest):
+        name, values = tag_metric(manifest, "corrupt")
+        assert name == "" and values.isna().all()
+
+    def test_missing_column(self, manifest):
+        name, values = tag_metric(manifest.drop(columns="blur_score"), "blurry")
+        assert name == "" and values.isna().all()
+
+
+class TestWorstFirstKey:
+    def test_low_is_worse_kept_high_is_worse_negated(self):
+        tags = pd.Series(["blurry", "underexposed", "corrupt"])
+        values = pd.Series([5.0, 0.95, float("nan")])
+        key = worst_first_key(tags, values)
+        assert key.iloc[0] == 5.0 and key.iloc[1] == -0.95 and pd.isna(key.iloc[2])
 
 
 class TestMetricColumns:

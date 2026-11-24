@@ -22,6 +22,7 @@ from src.report import (
     generate_report,
     load_schema,
     relative_issues,
+    report_dir,
     summarize_checks,
     to_jsonable,
     write_report,
@@ -281,6 +282,109 @@ class TestGenerateReport:
         before = (digest(dataset._manifest_path), digest(dataset._audit_path))
         generate_report(dataset)
         assert (digest(dataset._manifest_path), digest(dataset._audit_path)) == before
+
+
+@pytest.fixture
+def known(make_image_folder):
+    """
+    A manifest with known flags, built with apply_policy and group directly (no real checks):
+    10 images, Happy/0000-0005 = rows 0-5, Sad/0000-0003 = rows 6-9.
+    - rows 0, 1: blurry (review); row 1 also too_small; row 2: too_small (review)
+    - row 9: corrupt (drop)
+    - rows 3, 4, 6: one exact-duplicate group across Happy and Sad; one is kept, two are dropped
+    - rows 5 ~ 7 ~ 8: an embedding chain (group_alexnet_0_95), so one group of 3 that drops nothing
+    Expected: ok 4, review 3, drop 3; 6 images flagged; blurry 2, too_small 2, exact_duplicate 2, corrupt 1.
+    """
+    from src.utils.dataset import apply_policy
+    root = make_image_folder({"Happy": [(i * 20, 0, 0) for i in range(6)], "Sad": [(0, i * 20, 0) for i in range(4)]})
+    ds = ImageDataset(root, os.path.join(os.path.dirname(root), "results"))
+    df = ds._manifest
+    df["blur_score"], df["width"], df["height"], df["pixel_std"] = 100.0, 64, 64, 0.2
+    df["decode_error"] = ""
+    df.loc[0, "blur_score"], df.loc[1, "blur_score"] = 5.0, 10.0
+    df.loc[1, "width"], df.loc[2, "width"] = 20, 10
+    df.loc[9, "is_decodable"], df.loc[9, "decode_error"] = False, "OSError: truncated"
+
+    apply_policy(df, df.index.isin([0, 1]), "review", "blurry")
+    apply_policy(df, df.index.isin([1, 2]), "review", "too_small")
+    apply_policy(df, df.index == 9, "drop", "corrupt")
+    ds.group([[3, 4, 6]])
+    ds.keep_one_from_group(reason="exact_duplicate", seed=0)
+    chain = [[5, 7], [7, 8]]
+    ds.group(chain, column="group_alexnet_0_95")
+    ds.group(chain, column="split_group")
+    ds.save_manifest()
+    return ds
+
+
+class TestGenerateReportKnownAnswers:
+    def generate(self, known):
+        path = generate_report(known, ReportConfig(max_expected_group_size=2))
+        return json.load(open(path)), os.path.dirname(path)
+
+    def test_valid(self, known):
+        report, _ = self.generate(known)
+        assert report["valid"] is True and report["issues"] == []
+        assert schema_errors(report) == []
+
+    def test_status_counts(self, known):
+        report, _ = self.generate(known)
+        assert {s: c["count"] for s, c in report["status_counts"].items()} == {"ok": 4, "review": 3, "drop": 3}
+
+    def test_tag_counts_with_multi_tag_rows(self, known):
+        flags = self.generate(known)[0]["flags"]
+        assert {t["tag"]: t["count"] for t in flags["tags"]} == {"blurry": 2, "too_small": 2, "exact_duplicate": 2, "corrupt": 1}
+        assert flags["images_flagged"]["count"] == 6  # less than the 7 tag counts: row 1 has two tags
+
+    def test_cooccurrence(self, known):
+        pairs = self.generate(known)[0]["flags"]["cooccurrence"]
+        assert len(pairs) == 1 and pairs[0]["tags"] == ["blurry", "too_small"] and pairs[0]["count"] == 1
+        assert pairs[0]["given"]["blurry"]["pct"] == 50.0
+
+    def test_groups_and_chained_group(self, known):
+        duplicates = self.generate(known)[0]["duplicates"]
+        exact = duplicates["columns"]["group_id"]
+        assert (exact["groups"], exact["redundant"]["count"]) == (1, 2)
+        assert exact["cross_folder"]["count"] == 1
+        chain = duplicates["columns"]["group_alexnet_0_95"]
+        assert chain["size_histogram"] == [{"size": 3, "groups": 1}]
+        assert chain["chaining"]["suspects"] == 1 and chain["largest"][0]["chaining_suspect"] is True
+        assert chain["largest"][0]["status"] == {"ok": 3, "review": 0, "drop": 0}
+        levels = {l["level"]: l for l in duplicates["levels"]}
+        assert levels["perceptual"]["unique"]["count"] == 8
+        assert (levels["alexnet_0_95"]["unique"]["count"], levels["alexnet_0_95"]["added_redundant"]) == (6, 2)
+        assert duplicates["matches_split_group"] is True
+
+    def test_csvs_add_up_and_match_the_json(self, known):
+        report, out = self.generate(known)
+        read = lambda name: pd.read_csv(os.path.join(out, name), dtype=str, keep_default_na=False)
+        ok, review, drop = read("ok_manifest.csv"), read("review_manifest.csv"), read("drop_manifest.csv")
+        assert len(ok) + len(review) + len(drop) == report["dataset"]["file_count"] == 10
+        assert (len(ok), len(review), len(drop)) == tuple(report["status_counts"][s]["count"] for s in ("ok", "review", "drop"))
+        rows = {o["path"]: o["rows"] for o in report["outputs"]}
+        assert rows["report/review_manifest.csv"] == len(review)
+        # too_small before blurry (catalog order), worst (narrowest) first
+        assert review["path"].tolist() == ["Happy/0002.png", "Happy/0001.png", "Happy/0000.png"]
+        assert drop["path"].iloc[0] == "Sad/0003.png" and drop["severity"].iloc[0] == "error"
+        groups = read("duplicate_groups.csv")
+        assert groups.groupby("group_column").size().to_dict() == {"group_alexnet_0_95": 3, "group_id": 3, "split_group": 6}
+
+    def test_summary_states_the_json_numbers(self, known):
+        _, out = self.generate(known)
+        text = open(os.path.join(out, "report.md"), encoding="utf-8").read()
+        assert "We received 10 files" in text
+        assert "4 (40.0%) are usable as delivered" in text and "excluding 3 (30.0%)" in text
+        assert "6 (60.0%) images carry at least one flag" in text
+
+    def test_read_only(self, known):
+        before = (digest(known._manifest_path), digest(known._audit_path))
+        self.generate(known)
+        assert (digest(known._manifest_path), digest(known._audit_path)) == before
+
+
+class TestReportDir:
+    def test_under_result_dir(self, dataset):
+        assert report_dir(dataset) == os.path.join(dataset.result_dir, "report")
 
 
 class TestLoadSchema:

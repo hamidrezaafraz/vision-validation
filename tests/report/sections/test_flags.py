@@ -15,6 +15,7 @@ from src.report.sections.flags import (
     status_counts,
     tag_combinations,
     tag_counts,
+    tag_info,
 )
 
 
@@ -227,3 +228,12 @@ class TestFlagStatistics:
     def test_non_default_index(self, example):
         example.index = example.index + 100
         assert flag_statistics(example)["images_flagged"]["count"] == 6
+
+
+class TestTagInfo:
+    def test_catalog_entry(self):
+        assert tag_info("blurry") == {"category": "photometric", "severity": "warning"}
+        assert tag_info("near_duplicate_phash_4") == {"category": "duplicate", "severity": "info"}
+
+    def test_unknown(self):
+        assert tag_info("made_up") == {"category": UNKNOWN, "severity": UNKNOWN}

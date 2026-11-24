@@ -6,7 +6,9 @@ import pytest
 from src.report.validate import (
     ERROR,
     WARNING,
+    Issue,
     ManifestValidationError,
+    errors,
     raise_for_errors,
     validate_manifest,
 )
@@ -199,3 +201,12 @@ class TestRaiseForErrors:
 
     def test_no_issues_does_not_raise(self):
         raise_for_errors([])
+
+
+class TestErrors:
+    def test_keeps_only_errors_in_order(self):
+        issues = [Issue("a", WARNING, "m", 1), Issue("b", ERROR, "m", 1), Issue("c", ERROR, "m", 2)]
+        assert [i.code for i in errors(issues)] == ["b", "c"]
+
+    def test_none(self):
+        assert errors([]) == [] and errors([Issue("a", WARNING, "m", 1)]) == []

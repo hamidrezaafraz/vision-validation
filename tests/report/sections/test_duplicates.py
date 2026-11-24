@@ -5,7 +5,9 @@ import pandas as pd
 import pytest
 
 from src.report.sections.duplicates import (
+    column_kind,
     column_statistics,
+    describe_group,
     duplicate_statistics,
     embedding_columns,
     group_labels,
@@ -283,3 +285,31 @@ class TestDuplicateStatistics:
         section = duplicate_statistics(manifest, DATA)
         assert section["columns"]["group_id"]["groups"] == 0
         json.dumps(section, allow_nan=False)
+
+
+class TestColumnKind:
+    def test_kinds(self):
+        assert [column_kind(c) for c in ("hash", "group_id", "split_group", "group_alexnet_0_95")] == [
+            "exact", "duplicate", "split", "embedding",
+        ]
+
+
+class TestDescribeGroup:
+    def members(self, n, kept=()):
+        return pd.DataFrame({
+            "rel_path": [f"a/{i:03d}.png" for i in range(n)],
+            "folder": ["a"] * (n - 1) + ["b"],
+            "status": ["ok" if i in kept else "drop" for i in range(n)],
+        })
+
+    def test_fields(self):
+        group = describe_group(self.members(3, kept=(1,)), suspect=False, similarity=None)
+        assert group["size"] == 3 and group["folders"] == {"a": 2, "b": 1}
+        assert group["status"] == {"ok": 1, "review": 0, "drop": 2}
+        assert group["kept"] == ["a/001.png"] and group["members_truncated"] is False
+        assert group["chaining_suspect"] is False and group["similarity"] is None
+
+    def test_caps(self):
+        group = describe_group(self.members(60, kept=range(10)), suspect=True, similarity={"x": 1})
+        assert len(group["members"]) == 50 and group["members_truncated"] is True
+        assert len(group["kept"]) == 5 and group["chaining_suspect"] is True

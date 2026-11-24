@@ -58,25 +58,50 @@ def text_of(blocks) -> str:
     return render_markdown(blocks)
 
 
-class TestFormatting:
-    def test_int_pct_share(self):
-        assert fmt_int(59100) == "59,100" and fmt_int(None) == "–"
-        assert fmt_pct(52.04) == "52.0%"
-        assert fmt_pct(0.0, count=1) == "<0.1%" and fmt_pct(0.0, count=0) == "0.0%"
+class TestFmtInt:
+    def test_thousands_separator_and_none(self):
+        assert fmt_int(59100) == "59,100" and fmt_int(0) == "0" and fmt_int(None) == "–"
+
+
+class TestFmtPct:
+    def test_one_decimal(self):
+        assert fmt_pct(52.04) == "52.0%" and fmt_pct(100.0) == "100.0%"
+
+    def test_nonzero_share_never_shows_as_zero(self):
+        assert fmt_pct(0.0, count=1) == "<0.1%" and fmt_pct(0.04, count=3) == "<0.1%"
+        assert fmt_pct(0.0, count=0) == "0.0%" and fmt_pct(None) == "–"
+
+
+class TestFmtShare:
+    def test_count_and_pct(self):
         assert fmt_share({"count": 30755, "of": 59100, "pct": 52.04}) == "30,755 (52.0%)"
+        assert fmt_share({"count": 1, "of": 59100, "pct": 0.0}) == "1 (<0.1%)"
         assert fmt_share(None) == "–"
 
-    def test_num(self):
-        assert fmt_num(32608.51) == "32,609"
-        assert fmt_num(8192.0) == "8,192"
-        assert fmt_num(0.21104) == "0.211"
-        assert fmt_num(2.80213) == "2.802"
+
+class TestFmtNum:
+    def test_large_and_whole_values_without_decimals(self):
+        assert fmt_num(32608.51) == "32,609" and fmt_num(8192.0) == "8,192" and fmt_num(5) == "5"
+
+    def test_small_values_to_four_significant_digits(self):
+        assert fmt_num(0.21104) == "0.211" and fmt_num(2.80213) == "2.802" and fmt_num(0.0) == "0"
         assert fmt_num(None) == "–"
 
-    def test_bytes_params_folder(self):
-        assert fmt_bytes(733890704) == "733.9 MB" and fmt_bytes(500) == "500 B"
-        assert fmt_params({"a": 1, "b": "x"}) == "a=1, b=x" and fmt_params({}) == "defaults"
+
+class TestFmtFolder:
+    def test_root_is_named(self):
         assert fmt_folder(".") == "(top level)" and fmt_folder("Happy") == "Happy"
+
+
+class TestFmtBytes:
+    def test_units(self):
+        assert fmt_bytes(500) == "500 B" and fmt_bytes(1500) == "1.5 KB"
+        assert fmt_bytes(733890704) == "733.9 MB" and fmt_bytes(None) == "–"
+
+
+class TestFmtParams:
+    def test_settings(self):
+        assert fmt_params({"a": 1, "b": "x"}) == "a=1, b=x" and fmt_params({}) == "defaults"
 
 
 class TestHistogramSvg:
@@ -162,17 +187,22 @@ class TestWriteSummary:
         assert (out / SUMMARY_HTML).read_text(encoding="utf-8").startswith("<!doctype html>")
         assert (out / SUMMARY_MD).read_text(encoding="utf-8").startswith("# Dataset validation report")
 
-    def test_remove_summary(self, report, tmp_path):
+    def test_files_section_needs_outputs(self, report):
+        assert "## Files" not in text_of(build_blocks(report))
+        report["outputs"] = [{"path": "report/ok_manifest.csv", "rows": 3, "description": "d"}]
+        assert "- [ok_manifest.csv](ok_manifest.csv): d (3 rows)" in text_of(build_blocks(report))
+
+
+class TestRemoveSummary:
+    def test_removes_only_summary_files(self, report, tmp_path):
         out = tmp_path / "out"
         write_summary(report, str(out))
         (out / "keep.json").write_text("{}")
         remove_summary(str(out))
         assert os.listdir(out) == ["keep.json"]
 
-    def test_files_section_needs_outputs(self, report):
-        assert "## Files" not in text_of(build_blocks(report))
-        report["outputs"] = [{"path": "report/ok_manifest.csv", "rows": 3, "description": "d"}]
-        assert "- [ok_manifest.csv](ok_manifest.csv): d (3 rows)" in text_of(build_blocks(report))
+    def test_missing_files_are_fine(self, tmp_path):
+        remove_summary(str(tmp_path))
 
 
 class TestGenerateReportSummary:

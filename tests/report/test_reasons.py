@@ -135,3 +135,11 @@ class TestIsDuplicateTag:
     @pytest.mark.parametrize("tag", ["corrupt", "blurry", "label_conflict", "", "duplicate"])
     def test_other_tags(self, tag):
         assert not is_duplicate_tag(tag)
+
+
+class TestIsKnownTag:
+    def test_exact_alias_and_prefix(self):
+        assert is_known_tag("blurry") and is_known_tag("exact hash duplicates") and is_known_tag("near_duplicate_phash_4")
+
+    def test_unknown_and_bare_prefix(self):
+        assert not is_known_tag("made_up") and not is_known_tag("near_duplicate_")
