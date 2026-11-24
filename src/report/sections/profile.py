@@ -118,6 +118,13 @@ def file_sizes(manifest: pd.DataFrame, base_dir: str | None = None) -> pd.Series
     return _abs_paths(manifest, base_dir).map(size).rename(FILE_SIZE)
 
 
+def relative_paths(manifest: pd.DataFrame, data_dir: str, base_dir: str | None = None) -> pd.Series:
+    """Each row's path relative to data_dir, with '/' separators, so reports carry no local paths."""
+    root = os.path.abspath(data_dir)
+    paths = _abs_paths(manifest, base_dir).map(lambda p: os.path.relpath(p, root))
+    return paths.astype(str).str.replace(os.sep, "/", regex=False)
+
+
 def relative_folders(manifest: pd.DataFrame, data_dir: str, base_dir: str | None = None) -> pd.Series:
     """Each row's folder relative to data_dir, with '/' separators; '.' for files directly in data_dir."""
     root = os.path.abspath(data_dir)
