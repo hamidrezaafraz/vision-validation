@@ -8,6 +8,9 @@ from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
 from src.cli.lib import make_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
 from src.integrity import check_decode
+from src.report import ReportConfig, generate_report
+from src.report.review_sheet import MAX_PER_SECTION
+from src.report.validate import ManifestValidationError
 
 def arg(help: str, group: str, default=MISSING, choices=None):
     """Declares a dataclass field as a CLI flag. Fields without a default become required flags."""
@@ -35,6 +38,7 @@ class DatasetArgs:
         "Near duplicates": "Near duplicate detection using perceptual hashes",
         "Semantic embeddings": "Semantic embedding detection using pre-trained models",
         "Domain expert": "Embedding detection using domain expert models (e.g., face recognition)",
+        "Report": "Read-only report on the manifest, written to <resultdir>/report/ after the enabled checks",
     }
 
     datadir: str = arg("Root directory of the dataset", "Data")
@@ -111,7 +115,12 @@ class DatasetArgs:
     domain_expert_model_names: tuple = arg("Names of the domain expert models to apply one by one, e.g. --domain_expert_model_names facenet-vggface2 facenet-casia-webface", "Domain expert", default=('facenet-vggface2',), choices=['facenet-vggface2', 'facenet-casia-webface'])
     domain_expert_threshold: float = arg("Min cosine similarity for two domain expert embeddings to count as near duplicates", "Domain expert", default=0.95)
     domain_expert_batch_size: int = arg("Batch size used when computing domain expert embeddings", "Domain expert", default=128)
-    
+
+    report: bool = arg("Write validation_report.json, the CSV exports and the summary (report.html, report.md) "
+                       "to <resultdir>/report/. Runs after the enabled checks, or on its own against an existing manifest", "Report", default=False)
+    review_sheet: bool = arg("With --report, also write review_sheet.html (thumbnails; the slowest report step)", "Report", default=False)
+    force: bool = arg("With --report, write the report even if the manifest has errors (marked valid: false)", "Report", default=False)
+    max_per_section: int = arg("With --review_sheet, the most thumbnails per section", "Report", default=MAX_PER_SECTION)
         
     # keep_first_in_group: bool = arg("Keep the first image of each group and mark the rest as drop", "Validation", default=False)
     # restart: bool = arg("Restart the validation process from scratch, ignoring any previous results", "Validation", default=False)
@@ -144,6 +153,11 @@ class DatasetArgs:
 def dataset_cli(args: argparse.Namespace):
     """CLI for dataset tasks."""
     data_args = DatasetArgs.from_namespace(args)
+    report_only = [f"--{name}" for name in ("review_sheet", "force") if getattr(data_args, name)]
+    if data_args.max_per_section != MAX_PER_SECTION:
+        report_only.append("--max_per_section")
+    if report_only and not data_args.report:
+        raise SystemExit(f"{', '.join(report_only)} only apply to the report; add --report.")
     
     print(f"Validating dataset in \"{data_args.datadir}\"")
     print(f"Storing results in \"{data_args.resultdir}\"\n")
@@ -217,4 +231,23 @@ def dataset_cli(args: argparse.Namespace):
         for model_name in data_args.domain_expert_model_names:
             group_by_embeddings(dataset, model_name=model_name, threshold=data_args.domain_expert_threshold)
     print(f"Remaining images after validation: {len(dataset.df)}")
+
+    if data_args.report:
+        run_report(dataset, data_args)
+
+
+def run_report(dataset: ImageDataset, data_args: DatasetArgs) -> str:
+    """
+    Generates the report (src/report) for the dataset. All logic is in src.report; this only maps flags
+    to ReportConfig. On manifest errors without --force, prints them and exits with status 1.
+    """
+    config = ReportConfig(force=data_args.force, review_sheet=data_args.review_sheet, max_per_section=data_args.max_per_section)
+    try:
+        path = generate_report(dataset, config)
+    except ManifestValidationError as exc:
+        print(f"\nThe manifest has errors, so no report was written:\n{exc}\n"
+              "Fix them (or the checks that caused them) and rerun, or pass --force to write a report marked invalid.")
+        raise SystemExit(1)
+    print(f"Report written to {path}")
+    return path
    
