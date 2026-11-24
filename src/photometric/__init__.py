@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageFile, UnidentifiedImageError
 
+from src.utils.audit import audited
 from src.utils.dataset import ImageClassificationDataset, ImageDataset, apply_policy, write_back
 from src.utils.logger import Logger
 
@@ -186,6 +187,7 @@ def _inspect_single_photometric(
     )
 
 
+@audited("check_photometric")
 def check_photometric(
     dataset: ImageDataset | ImageClassificationDataset,
     # Manifest column that holds the image file paths.

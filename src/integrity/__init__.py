@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageFile, UnidentifiedImageError
 
+from src.utils.audit import audited
 from src.utils.dataset import ImageClassificationDataset, ImageDataset, apply_policy, write_back
 from src.utils.logger import Logger
 
@@ -112,6 +113,7 @@ def _inspect_single_image(path: str | Path) -> DecodeResult:
         return DecodeResult.failed(path, exc)
 
 
+@audited("check_decode")
 def check_decode(
     dataset: ImageDataset | ImageClassificationDataset,
     path_col: str = "path",

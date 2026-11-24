@@ -5,6 +5,7 @@ import numpy as np
 import os
 from src.utils.images import find_image_paths
 from src.utils.logger import Logger
+from src.utils.audit import MANIFEST_CREATED, RESTART, record_event
 import json
 import torch
 from torch.utils.data import Subset, Dataset as TorchDataset
@@ -252,6 +253,7 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
         self._manifest["action"] = ""
         self._manifest["reason"] = ""
         self.save_manifest()
+        record_event(self, RESTART)
 
     def delete_manifest(self):
         if os.path.exists(self._manifest_path):
@@ -272,6 +274,7 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
             self._manifest["is_decodable"] = [True] * dataset_len
             self._manifest["exif_orientation"] = [1] * dataset_len
             self._manifest.to_csv(path, index=False)
+            record_event(self, MANIFEST_CREATED)
         else:
             self._manifest = pd.read_csv(
                 path, 
@@ -459,6 +462,7 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
             self._manifest["action"] = [""] * dataset_len
             self._manifest["reason"] = [""] * dataset_len
             self._manifest.to_csv(path, index=False)
+            record_event(self, MANIFEST_CREATED)
         else:
             self._manifest = pd.read_csv(
                 path, 

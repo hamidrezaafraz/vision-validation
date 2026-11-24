@@ -1,4 +1,5 @@
 
+from src.utils.audit import audited
 from src.utils.dataset import ImageClassificationDataset, ImageDataset, embedding_group_column
 from src.exact_duplicates.hashing import get_hash_hexdigest
 import numpy as np
@@ -34,9 +35,11 @@ def make_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="b
     )
     dataset.save_manifest()
 
+@audited("group_by_hash")
 def group_by_hash(dataset: ImageDataset | ImageClassificationDataset, group_keep_strategy="random", seed=None):
     """Groups images that share the same file hash using dataset.group, then keeps one image per
-    group (picked by group_keep_strategy) and tags the rest 'exact_duplicate'. Hashes first if needed."""
+    group (picked by group_keep_strategy) and tags the rest 'exact_duplicate'. Hashes first if needed.
+    Returns stats for the audit log: groups found and images in them (0 and 0 when there are no duplicates)."""
     if not dataset.has_hash():
         print("Hashing images before grouping...")
         make_hashes(dataset)
@@ -51,6 +54,7 @@ def group_by_hash(dataset: ImageDataset | ImageClassificationDataset, group_keep
         dataset.group(groups)
         dataset.keep_one_from_group(reason="exact_duplicate", group_keep_strategy=group_keep_strategy, seed=seed)
         print("Remaining images after grouping: ", len(dataset.df), "\n")
+    return {"groups_found": len(groups), "images_in_groups": sum(len(g) for g in groups)}
         
 def make_perceptual_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="phash"):
     """Hashes all images in the dataset using perceptual hashing and saves the hashes
@@ -60,6 +64,7 @@ def make_perceptual_hashes(dataset: ImageDataset | ImageClassificationDataset, h
     dataset.save_perceptual_hashes(H, df.index, hash_name=hash_name)
 
 
+@audited("group_by_perceptual_hash")
 def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset, hash_name='phash', threshold=0, group_keep_strategy="random", seed=None):
     """
     Verify near duplicates in the dataset using perceptual hashes.
@@ -72,7 +77,7 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
     - seed: int or None, makes the 'random' strategy reproducible
 
     Returns:
-    - None
+    - dict for the audit log: pairs_found, groups_found, images_in_groups
     """
     # Compute perceptual hashes for all images in the dataset
     H, indices = dataset.load_perceptual_hashes(hash_name=hash_name)
@@ -92,7 +97,9 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
         dataset.group(groups)
         dataset.keep_one_from_group(reason=f"near_duplicate_{hash_name}_{threshold}", group_keep_strategy=group_keep_strategy, seed=seed)
     else:
+        groups = []
         print("No near duplicates found.")
+    return {"pairs_found": len(pairs), "groups_found": len(groups), "images_in_groups": sum(len(g) for g in groups)}
 
 def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
     """
@@ -115,6 +122,7 @@ def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_na
     emb = get_embeddings(model, dataset, batch_size=batch_size, device=device)
     return emb
 
+@audited("group_by_embeddings")
 def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95):
     """
     Verify near embeddings in the dataset (rows not dropped). Merges the per-model
@@ -127,7 +135,7 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
     - threshold: float, similarity threshold for considering embeddings as near
 
     Returns:
-    - None
+    - dict for the audit log: pairs_found, groups_found, images_in_groups, group_column
     """
         
     emb = dataset.load_embeddings(model_name=model_name)
@@ -151,4 +159,11 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
         dataset.group(groups, column='split_group')
         dataset.save_manifest()
     else:
-        print("No near embeddings found.")    
+        groups = []
+        print("No near embeddings found.")
+    return {
+        "pairs_found": len(pairs),
+        "groups_found": len(groups),
+        "images_in_groups": sum(len(g) for g in groups),
+        "group_column": embedding_group_column(model_name, threshold),
+    }    
