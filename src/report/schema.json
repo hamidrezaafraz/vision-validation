@@ -50,7 +50,19 @@
     "profile": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/profile"}]},
     "duplicates": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/duplicates"}]},
     "checks": {"type": "object", "additionalProperties": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/check"}}},
-    "outputs": {"type": "array", "items": {"type": "string", "pattern": "^[^/]"}}
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "rows", "description"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^[^/]"},
+          "rows": {"type": ["integer", "null"], "minimum": 0},
+          "description": {"type": "string"}
+        }
+      }
+    }
   },
   "$defs": {
     "count": {"type": "integer", "minimum": 0},

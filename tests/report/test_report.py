@@ -9,6 +9,8 @@ import pytest
 from jsonschema import Draft202012Validator
 
 import src.report as report_module
+import src.report.exports as exports_module
+from src.report.exports import EXPORTS
 from src.cli.lib import group_by_hash
 from src.integrity import check_decode
 from src.report import (
@@ -237,13 +239,48 @@ class TestGenerateReport:
         path = generate_report(dataset)
         assert path == os.path.join(dataset.result_dir, "report", REPORT_FILE)
         report = strict_loads(open(path).read())
-        assert report["outputs"] == [f"report/{REPORT_FILE}"]
+        assert [o["path"] for o in report["outputs"]] == [
+            "report/ok_manifest.csv", "report/review_manifest.csv", "report/drop_manifest.csv",
+            "report/duplicate_groups.csv", f"report/{REPORT_FILE}",
+        ]
+        rows = {o["path"]: o["rows"] for o in report["outputs"]}
+        assert rows["report/ok_manifest.csv"] + rows["report/review_manifest.csv"] + rows["report/drop_manifest.csv"] == 5
+        assert rows[f"report/{REPORT_FILE}"] is None
+        for output in report["outputs"]:
+            assert os.path.exists(os.path.join(dataset.result_dir, output["path"]))
         assert schema_errors(report) == []
 
     def test_regenerating_overwrites(self, dataset):
         first = generate_report(dataset)
         second = generate_report(dataset)
-        assert first == second and os.listdir(os.path.dirname(first)) == [REPORT_FILE]
+        assert first == second
+        assert sorted(os.listdir(os.path.dirname(first))) == sorted([REPORT_FILE, *EXPORTS])
+
+    def test_failed_exports_with_force(self, dataset, monkeypatch):
+        generate_report(dataset)
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("boom")
+        monkeypatch.setitem(exports_module.BUILDERS, "drop_manifest.csv", broken)
+        path = generate_report(dataset, ReportConfig(force=True))
+        report = strict_loads(open(path).read())
+        assert report["valid"] is False
+        assert "export_failed" in {i["code"] for i in report["issues"]}
+        assert [o["path"] for o in report["outputs"]] == [f"report/{REPORT_FILE}"]
+        # No stale CSVs from the previous run are left next to the new JSON.
+        assert os.listdir(os.path.dirname(path)) == [REPORT_FILE]
+
+    def test_failed_exports_without_force(self, dataset, monkeypatch):
+        def broken(*args, **kwargs):
+            raise RuntimeError("boom")
+        monkeypatch.setitem(exports_module.BUILDERS, "drop_manifest.csv", broken)
+        with pytest.raises(RuntimeError, match="boom"):
+            generate_report(dataset)
+
+    def test_is_read_only(self, dataset):
+        before = (digest(dataset._manifest_path), digest(dataset._audit_path))
+        generate_report(dataset)
+        assert (digest(dataset._manifest_path), digest(dataset._audit_path)) == before
 
 
 class TestLoadSchema:

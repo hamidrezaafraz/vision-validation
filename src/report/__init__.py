@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.report.exports import write_exports
 from src.report.sections.duplicates import (
     LARGEST_GROUPS,
     MAX_EXPECTED_GROUP_SIZE,
@@ -49,6 +50,7 @@ REPORT_SCHEMA_VERSION = 1
 REPORT_DIR = "report"
 REPORT_FILE = "validation_report.json"
 SCHEMA_PATH = Path(__file__).with_name("schema.json")
+REPORT_DESCRIPTION = "Every number in this report, machine-readable. The other files are views of the manifest."
 
 
 @dataclass(frozen=True)
@@ -263,10 +265,31 @@ def report_dir(dataset) -> str:
 
 
 def generate_report(dataset, config: ReportConfig = ReportConfig()) -> str:
-    """Builds the report and writes it to <result_dir>/report/validation_report.json. Returns that path."""
+    """
+    Builds the report, writes the CSV exports (src/report/exports.py) and then
+    <result_dir>/report/validation_report.json, last, so the JSON only lists files that exist.
+    Returns the JSON's path.
+
+    `outputs` lists every file written: {path relative to result_dir, rows (None for the JSON), description}.
+    If the exports fail, they are all removed; with config.force the JSON is still written with
+    valid = false and an 'export_failed' issue, otherwise the exception propagates.
+    """
     report = build_report(dataset, config)
-    path = os.path.join(report_dir(dataset), REPORT_FILE)
-    report["outputs"] = [f"{REPORT_DIR}/{REPORT_FILE}"]
+    out_dir = report_dir(dataset)
+    try:
+        exports = write_exports(dataset._manifest.copy(), out_dir, config.data_dir or dataset_data_dir(dataset), config.base_dir)
+    except Exception as exc:
+        if not config.force:
+            raise
+        logger.error(f"Exports failed: {exc}")
+        exports = []
+        report["issues"].append(asdict(Issue("export_failed", ERROR, f"CSV exports could not be written: {type(exc).__name__}: {exc}", 1, [])))
+        report["valid"] = False
+    report["outputs"] = [
+        *({"path": f"{REPORT_DIR}/{e['path']}", "rows": e["rows"], "description": e["description"]} for e in exports),
+        {"path": f"{REPORT_DIR}/{REPORT_FILE}", "rows": None, "description": REPORT_DESCRIPTION},
+    ]
+    path = os.path.join(out_dir, REPORT_FILE)
     write_report(report, path)
     logger.info(f"Report written to {path} (valid: {report['valid']})")
     return path
