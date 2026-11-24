@@ -241,7 +241,7 @@ class TestGenerateReport:
         report = strict_loads(open(path).read())
         assert [o["path"] for o in report["outputs"]] == [
             "report/ok_manifest.csv", "report/review_manifest.csv", "report/drop_manifest.csv",
-            "report/duplicate_groups.csv", f"report/{REPORT_FILE}",
+            "report/duplicate_groups.csv", "report/report.html", "report/report.md", f"report/{REPORT_FILE}",
         ]
         rows = {o["path"]: o["rows"] for o in report["outputs"]}
         assert rows["report/ok_manifest.csv"] + rows["report/review_manifest.csv"] + rows["report/drop_manifest.csv"] == 5
@@ -254,7 +254,7 @@ class TestGenerateReport:
         first = generate_report(dataset)
         second = generate_report(dataset)
         assert first == second
-        assert sorted(os.listdir(os.path.dirname(first))) == sorted([REPORT_FILE, *EXPORTS])
+        assert sorted(os.listdir(os.path.dirname(first))) == sorted([REPORT_FILE, *EXPORTS, "report.html", "report.md"])
 
     def test_failed_exports_with_force(self, dataset, monkeypatch):
         generate_report(dataset)
@@ -266,9 +266,9 @@ class TestGenerateReport:
         report = strict_loads(open(path).read())
         assert report["valid"] is False
         assert "export_failed" in {i["code"] for i in report["issues"]}
-        assert [o["path"] for o in report["outputs"]] == [f"report/{REPORT_FILE}"]
+        assert [o["path"] for o in report["outputs"]] == ["report/report.html", "report/report.md", f"report/{REPORT_FILE}"]
         # No stale CSVs from the previous run are left next to the new JSON.
-        assert os.listdir(os.path.dirname(path)) == [REPORT_FILE]
+        assert sorted(os.listdir(os.path.dirname(path))) == sorted([REPORT_FILE, "report.html", "report.md"])
 
     def test_failed_exports_without_force(self, dataset, monkeypatch):
         def broken(*args, **kwargs):

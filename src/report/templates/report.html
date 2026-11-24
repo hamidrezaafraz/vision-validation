@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$title</title>
+<style>
+:root { --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --card: #f5f5f7; --line: #d2d2d7;
+        --accent: #2f5fa7; --bad: #c62828; --bad-bg: #fdecea; --warn: #b26a00; --info: #2f5fa7; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #141416; --fg: #f2f2f7; --muted: #a1a1a6; --card: #1f1f23; --line: #3a3a3f;
+          --accent: #79a8ff; --bad: #ff6b6b; --bad-bg: #3a1716; --warn: #f0b44c; --info: #79a8ff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 32px 16px 72px; background: var(--bg); color: var(--fg);
+       font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 920px; margin: 0 auto; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 40px 0 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 24px 0 6px; }
+p { margin: 8px 0; } .meta { color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
+.table-wrap { overflow-x: auto; margin: 8px 0 16px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.banner { background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad); border-radius: 8px; padding: 12px 16px; margin: 16px 0; }
+.banner strong { display: block; margin-bottom: 4px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.kpi { background: var(--card); border-radius: 10px; padding: 12px 14px; }
+.kpi .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi .label { color: var(--muted); font-size: 13px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 12px 0; }
+figure { margin: 0; } figcaption { font-size: 13px; color: var(--muted); }
+svg .bar { fill: var(--accent); } svg .axis { fill: var(--muted); font-size: 10px; }
+svg .threshold { stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 3 2; }
+ul { padding-left: 20px; } li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+$body
+</main>
+</body>
+</html>

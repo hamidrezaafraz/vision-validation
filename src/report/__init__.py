@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from src.report.exports import write_exports
+from src.report.summary import SUMMARY_HTML, SUMMARY_MD, remove_summary, write_summary
 from src.report.review_sheet import MAX_PER_SECTION, REVIEW_SHEET_FILE, SEED, build_review_sheet, write_review_sheet
 from src.report.sections.duplicates import (
     LARGEST_GROUPS,
@@ -52,6 +53,10 @@ REPORT_DIR = "report"
 REPORT_FILE = "validation_report.json"
 SCHEMA_PATH = Path(__file__).with_name("schema.json")
 REPORT_DESCRIPTION = "Every number in this report, machine-readable. The other files are views of the manifest."
+SUMMARY_DESCRIPTIONS = {
+    SUMMARY_HTML: "Human-readable summary for the client, rendered from validation_report.json.",
+    SUMMARY_MD: "The same summary as Markdown (without charts).",
+}
 REVIEW_SHEET_DESCRIPTION = ("Self-contained HTML contact sheet: thumbnails per flag (worst first), the largest and "
                             "chaining-suspect duplicate groups, and a random baseline of unflagged images. rows = thumbnails.")
 
@@ -77,6 +82,8 @@ class ReportConfig:
     review_sheet: bool = False
     max_per_section: int = MAX_PER_SECTION
     review_seed: int = SEED
+    # Write the human-readable summary (report.html and report.md).
+    summary: bool = True
 
 
 # Config fields that hold local paths; left out of the report.
@@ -278,17 +285,18 @@ def _failed(code: str, what: str, exc: Exception) -> dict:
 def generate_report(dataset, config: ReportConfig = ReportConfig()) -> str:
     """
     Builds the report, writes the CSV exports (src/report/exports.py), the review sheet when
-    config.review_sheet is set (src/report/review_sheet.py), and then
-    <result_dir>/report/validation_report.json, last, so the JSON only lists files that exist.
-    Returns the JSON's path.
+    config.review_sheet is set (src/report/review_sheet.py), the summary when config.summary is set
+    (src/report/summary.py, rendered from the final report dict, so it shows the same numbers and the
+    same `valid` as the JSON), and then <result_dir>/report/validation_report.json, last, so the JSON
+    only lists files that exist. Returns the JSON's path.
 
     `outputs` lists every file written: {path relative to result_dir, rows, description}; rows is the
     row count of a CSV, the number of thumbnails of the review sheet, and None for the JSON.
 
     A file that fails is removed rather than left over from an earlier run. With config.force the JSON
-    is still written with valid = false and an 'export_failed' / 'review_sheet_failed' issue; otherwise
-    the exception propagates. Without config.review_sheet, an old review sheet is removed too, because it
-    would describe an earlier run.
+    is still written with valid = false and an 'export_failed' / 'review_sheet_failed' / 'summary_failed'
+    issue; otherwise the exception propagates. An optional file that is turned off is removed too,
+    because an old copy would describe an earlier run.
     """
     report = build_report(dataset, config)
     out_dir = report_dir(dataset)
@@ -320,8 +328,24 @@ def generate_report(dataset, config: ReportConfig = ReportConfig()) -> str:
             logger.error(f"Review sheet failed: {exc}")
             report["issues"].append(_failed("review_sheet_failed", "The review sheet", exc))
 
+    json_output = {"path": f"{REPORT_DIR}/{REPORT_FILE}", "rows": None, "description": REPORT_DESCRIPTION}
+    summary_outputs = [{"path": f"{REPORT_DIR}/{n}", "rows": None, "description": d} for n, d in SUMMARY_DESCRIPTIONS.items()]
     report["valid"] = report["valid"] and not any(i["severity"] == ERROR for i in report["issues"])
-    report["outputs"] = [*outputs, {"path": f"{REPORT_DIR}/{REPORT_FILE}", "rows": None, "description": REPORT_DESCRIPTION}]
+    report["outputs"] = [*outputs, *(summary_outputs if config.summary else []), json_output]
+    report = to_jsonable(report)
+
+    remove_summary(out_dir)
+    if config.summary:
+        try:
+            write_summary(report, out_dir)
+        except Exception as exc:
+            remove_summary(out_dir)
+            if not config.force:
+                raise
+            logger.error(f"Summary failed: {exc}")
+            report["issues"].append(_failed("summary_failed", "The summary", exc))
+            report["valid"] = False
+            report["outputs"] = [*outputs, json_output]
     path = os.path.join(out_dir, REPORT_FILE)
     write_report(report, path)
     logger.info(f"Report written to {path} (valid: {report['valid']})")
