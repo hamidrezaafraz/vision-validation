@@ -19,7 +19,7 @@ EXIF_ORIENTATION_TAG = 0x0112
 DEFAULT_ORIENTATION = 1
 MISMATCH_POLICIES = ("review", "drop")
 
-FORMAT_COLUMNS = ["color_mode", "num_channels", "dtype", "bit_depth", "has_non_trivial_alpha"]
+FORMAT_COLUMNS = ["format", "color_mode", "num_channels", "dtype", "bit_depth", "has_non_trivial_alpha"]
 DIMENSION_COLUMNS = ["width", "height", "aspect_ratio", "megapixels"]
 
 # Pillow raises different exception types depending on the format plugin.
@@ -36,6 +36,8 @@ class DecodeResult:
     exif_orientation: int
     decode_error: str
 
+    # Pillow's name for the decoded file format (JPEG, PNG, ...), read from the content, not the extension.
+    format: str
     color_mode: str
     num_channels: int
     dtype: str
@@ -54,6 +56,7 @@ class DecodeResult:
             is_decodable=False,
             exif_orientation=-1,
             decode_error=f"{type(exc).__name__}: {exc}",
+            format="invalid",
             color_mode="invalid",
             num_channels=0,
             dtype="invalid",
@@ -102,6 +105,7 @@ def _inspect_single_image(path: str | Path) -> DecodeResult:
                 is_decodable=True,
                 exif_orientation=orientation,
                 decode_error="",
+                format=img.format or "unknown",
                 color_mode=img.mode,
                 num_channels=len(bands),
                 dtype=str(arr.dtype),

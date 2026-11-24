@@ -32,6 +32,11 @@ class TestInspectSingleImage:
         assert result.aspect_ratio == 4.0
         assert result.megapixels == 0.04
 
+    def test_reads_format_from_content_not_extension(self, tmp_path):
+        path = tmp_path / "really_a_png.jpg"
+        Image.new("RGB", (8, 8)).save(path, format="PNG")
+        assert _inspect_single_image(path).format == "PNG"
+
     def test_undecodable_file_gets_placeholder_dimensions(self, tmp_path):
         path = tmp_path / "junk.png"
         path.write_bytes(b"not an image")
@@ -39,6 +44,7 @@ class TestInspectSingleImage:
         assert not result.is_decodable
         assert (result.width, result.height, result.megapixels) == (0, 0, 0.0)
         assert result.aspect_ratio == float("inf")
+        assert result.format == "invalid"
 
 
 class TestCheckDecode:
@@ -83,7 +89,7 @@ class TestCheckDecode:
         check_decode(dataset)
         saved = pd.read_csv(tmp_path / "results" / "manifest.csv", dtype=str, keep_default_na=False)
         row = _row(saved, "ok")
-        assert (row["is_decodable"], row["color_mode"]) == ("True", "RGB")
+        assert (row["is_decodable"], row["format"], row["color_mode"]) == ("True", "PNG", "RGB")
         assert (row["width"], row["height"], row["aspect_ratio"]) == ("64", "32", "2.0")
 
     @pytest.mark.parametrize("kwarg", ["on_mismatch", "on_dimension_violation"])
