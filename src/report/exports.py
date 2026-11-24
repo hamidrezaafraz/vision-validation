@@ -127,6 +127,25 @@ def _metric_values(manifest: pd.DataFrame, rows: pd.DataFrame, column: str, rel:
     return pd.Series(out, index=rows.index)
 
 
+def tag_metric(rows: pd.DataFrame, tag: str) -> tuple[str, pd.Series]:
+    """
+    The metric that ranks `rows` for `tag` (see SORT_KEYS): its name, e.g. 'blur_score' or
+    'min(width,height)', and its value per row. ('', all-NaN) for tags without one or when a column is missing.
+    """
+    if tag not in SORT_KEYS or not all(c in rows.columns for c in SORT_KEYS[tag][0]):
+        return "", pd.Series(float("nan"), index=rows.index)
+    columns, how, _ = SORT_KEYS[tag]
+    values = pd.concat([numeric_column(rows, c) for c in columns], axis=1)
+    name = columns[0] if len(columns) == 1 else f"{how}({','.join(columns)})"
+    return name, values.min(axis=1) if how == "min" else values.max(axis=1)
+
+
+def worst_first_key(tags: pd.Series, values: pd.Series) -> pd.Series:
+    """One ascending sort key that puts the worst case first for every tag: values of tags where high is worse are negated."""
+    ascending = tags.map(lambda t: SORT_KEYS.get(t, ((), "", True))[2])
+    return values.where(ascending, -values)
+
+
 def identity(manifest: pd.DataFrame, data_dir: str, base_dir: str | None = None) -> pd.DataFrame:
     """path (relative to data_dir), status, reason, severity, and label when the manifest has one."""
     frame = pd.DataFrame({
@@ -168,18 +187,14 @@ def review_manifest(manifest: pd.DataFrame, data_dir: str, base_dir: str | None 
     frame["tag"] = rows["reason"].map(primary_tag)
 
     frame["metric"], frame["metric_value"] = "", float("nan")
-    for tag, (columns, how, _) in SORT_KEYS.items():
+    for tag in frame["tag"].unique():
         mask = frame["tag"] == tag
-        if not mask.any() or not all(c in manifest.columns for c in columns):
-            continue
-        values = pd.concat([numeric_column(rows, c) for c in columns], axis=1)
-        frame.loc[mask, "metric"] = columns[0] if len(columns) == 1 else f"{how}({','.join(columns)})"
-        frame.loc[mask, "metric_value"] = (values.min(axis=1) if how == "min" else values.max(axis=1))[mask]
+        name, values = tag_metric(rows[mask], tag)
+        if name:
+            frame.loc[mask, "metric"], frame.loc[mask, "metric_value"] = name, values
 
-    # One sort key that is "worse first" for every tag: negate the values of tags where high is worse.
-    ascending = frame["tag"].map(lambda t: SORT_KEYS.get(t, ((), "", True))[2])
     frame["_tag_order"] = frame["tag"].map(lambda t: _tag_order(t) if t else (len(SEVERITY_ORDER), 0, ""))
-    frame["_key"] = frame["metric_value"].where(ascending, -frame["metric_value"])
+    frame["_key"] = worst_first_key(frame["tag"], frame["metric_value"])
     frame = frame.sort_values(["_tag_order", "_key", "path"], na_position="last").drop(columns=["_tag_order", "_key"])
 
     all_tags = [t for reason in rows["reason"] for t in row_tags(reason)]

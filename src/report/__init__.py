@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from src.report.exports import write_exports
+from src.report.review_sheet import MAX_PER_SECTION, REVIEW_SHEET_FILE, SEED, build_review_sheet, write_review_sheet
 from src.report.sections.duplicates import (
     LARGEST_GROUPS,
     MAX_EXPECTED_GROUP_SIZE,
@@ -51,6 +52,8 @@ REPORT_DIR = "report"
 REPORT_FILE = "validation_report.json"
 SCHEMA_PATH = Path(__file__).with_name("schema.json")
 REPORT_DESCRIPTION = "Every number in this report, machine-readable. The other files are views of the manifest."
+REVIEW_SHEET_DESCRIPTION = ("Self-contained HTML contact sheet: thumbnails per flag (worst first), the largest and "
+                            "chaining-suspect duplicate groups, and a random baseline of unflagged images. rows = thumbnails.")
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,10 @@ class ReportConfig:
     borderline_margin: float = BORDERLINE_MARGIN
     largest_groups: int = LARGEST_GROUPS
     max_expected_group_size: int = MAX_EXPECTED_GROUP_SIZE
+    # Also write review_sheet.html. Off by default: thumbnailing is the slowest step of the report.
+    review_sheet: bool = False
+    max_per_section: int = MAX_PER_SECTION
+    review_seed: int = SEED
 
 
 # Config fields that hold local paths; left out of the report.
@@ -264,31 +271,57 @@ def report_dir(dataset) -> str:
     return os.path.join(dataset.result_dir, REPORT_DIR)
 
 
+def _failed(code: str, what: str, exc: Exception) -> dict:
+    return asdict(Issue(code, ERROR, f"{what} could not be written: {type(exc).__name__}: {exc}", 1, []))
+
+
 def generate_report(dataset, config: ReportConfig = ReportConfig()) -> str:
     """
-    Builds the report, writes the CSV exports (src/report/exports.py) and then
+    Builds the report, writes the CSV exports (src/report/exports.py), the review sheet when
+    config.review_sheet is set (src/report/review_sheet.py), and then
     <result_dir>/report/validation_report.json, last, so the JSON only lists files that exist.
     Returns the JSON's path.
 
-    `outputs` lists every file written: {path relative to result_dir, rows (None for the JSON), description}.
-    If the exports fail, they are all removed; with config.force the JSON is still written with
-    valid = false and an 'export_failed' issue, otherwise the exception propagates.
+    `outputs` lists every file written: {path relative to result_dir, rows, description}; rows is the
+    row count of a CSV, the number of thumbnails of the review sheet, and None for the JSON.
+
+    A file that fails is removed rather than left over from an earlier run. With config.force the JSON
+    is still written with valid = false and an 'export_failed' / 'review_sheet_failed' issue; otherwise
+    the exception propagates. Without config.review_sheet, an old review sheet is removed too, because it
+    would describe an earlier run.
     """
     report = build_report(dataset, config)
     out_dir = report_dir(dataset)
+    data_dir = config.data_dir or dataset_data_dir(dataset)
+    manifest = dataset._manifest.copy()
+    outputs = []
+
     try:
-        exports = write_exports(dataset._manifest.copy(), out_dir, config.data_dir or dataset_data_dir(dataset), config.base_dir)
+        exports = write_exports(manifest, out_dir, data_dir, config.base_dir)
+        outputs += [{"path": f"{REPORT_DIR}/{e['path']}", "rows": e["rows"], "description": e["description"]} for e in exports]
     except Exception as exc:
         if not config.force:
             raise
         logger.error(f"Exports failed: {exc}")
-        exports = []
-        report["issues"].append(asdict(Issue("export_failed", ERROR, f"CSV exports could not be written: {type(exc).__name__}: {exc}", 1, [])))
-        report["valid"] = False
-    report["outputs"] = [
-        *({"path": f"{REPORT_DIR}/{e['path']}", "rows": e["rows"], "description": e["description"]} for e in exports),
-        {"path": f"{REPORT_DIR}/{REPORT_FILE}", "rows": None, "description": REPORT_DESCRIPTION},
-    ]
+        report["issues"].append(_failed("export_failed", "CSV exports", exc))
+
+    sheet_path = os.path.join(out_dir, REVIEW_SHEET_FILE)
+    if os.path.exists(sheet_path):
+        os.remove(sheet_path)
+    if config.review_sheet:
+        try:
+            page, thumbnails = build_review_sheet(manifest, report, data_dir, config.base_dir,
+                                                  max_per_section=config.max_per_section, seed=config.review_seed)
+            write_review_sheet(page, sheet_path)
+            outputs.append({"path": f"{REPORT_DIR}/{REVIEW_SHEET_FILE}", "rows": thumbnails, "description": REVIEW_SHEET_DESCRIPTION})
+        except Exception as exc:
+            if not config.force:
+                raise
+            logger.error(f"Review sheet failed: {exc}")
+            report["issues"].append(_failed("review_sheet_failed", "The review sheet", exc))
+
+    report["valid"] = report["valid"] and not any(i["severity"] == ERROR for i in report["issues"])
+    report["outputs"] = [*outputs, {"path": f"{REPORT_DIR}/{REPORT_FILE}", "rows": None, "description": REPORT_DESCRIPTION}]
     path = os.path.join(out_dir, REPORT_FILE)
     write_report(report, path)
     logger.info(f"Report written to {path} (valid: {report['valid']})")
