@@ -91,6 +91,7 @@ class GroupColumnsMixin:
 
 class ImageDataset(GroupColumnsMixin, TorchDataset):
     def __init__(self, data_dir, result_dir, transform=None):
+        self.data_dir = data_dir
         self.result_dir = result_dir
         self.transform = transform
         

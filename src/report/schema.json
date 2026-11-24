@@ -1,0 +1,337 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vision_validation/validation_report.schema.json",
+  "title": "validation_report.json",
+  "description": "Schema version 1. Change together with REPORT_SCHEMA_VERSION in src/report/__init__.py. Sections are null only when the report was forced and that section failed (see issues, code section_failed).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "run", "dataset", "valid", "issues", "status_counts",
+               "flags", "profile", "duplicates", "checks", "outputs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "run": {
+      "type": "object",
+      "required": ["generated_by", "config", "audit_entries", "current_audit_entries", "last_reset"],
+      "properties": {
+        "generated_by": {"$ref": "#/$defs/environment"},
+        "config": {
+          "type": "object",
+          "required": ["force", "use_embeddings"],
+          "not": {"anyOf": [{"required": ["data_dir"]}, {"required": ["base_dir"]}]}
+        },
+        "audit_entries": {"$ref": "#/$defs/count"},
+        "current_audit_entries": {"$ref": "#/$defs/count"},
+        "last_reset": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "object", "required": ["event", "at"],
+             "properties": {"event": {"enum": ["manifest_created", "restart"]}, "at": {"type": ["string", "null"]}}}
+          ]
+        }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fingerprint", "method", "file_count", "total_bytes", "missing_files"],
+      "properties": {
+        "fingerprint": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "method": {"enum": ["content", "size_mtime"]},
+        "file_count": {"$ref": "#/$defs/count"},
+        "total_bytes": {"$ref": "#/$defs/count"},
+        "missing_files": {"$ref": "#/$defs/count"}
+      }
+    },
+    "valid": {"type": "boolean"},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "status_counts": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/status_shares"}]},
+    "flags": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/flags"}]},
+    "profile": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/profile"}]},
+    "duplicates": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/duplicates"}]},
+    "checks": {"type": "object", "additionalProperties": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/check"}}},
+    "outputs": {"type": "array", "items": {"type": "string", "pattern": "^[^/]"}}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "share": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "of", "pct"],
+      "properties": {
+        "count": {"$ref": "#/$defs/count"},
+        "of": {"$ref": "#/$defs/count"},
+        "pct": {"type": "number", "minimum": 0, "maximum": 100}
+      }
+    },
+    "status_shares": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "review", "drop"],
+      "properties": {"ok": {"$ref": "#/$defs/share"}, "review": {"$ref": "#/$defs/share"}, "drop": {"$ref": "#/$defs/share"}}
+    },
+    "severity": {"enum": ["error", "warning", "info", "unknown"]},
+    "environment": {
+      "type": "object",
+      "required": ["git_commit", "git_dirty", "python", "platform", "machine", "packages"],
+      "properties": {
+        "git_commit": {"type": ["string", "null"]},
+        "git_dirty": {"type": ["boolean", "null"]},
+        "python": {"type": "string"},
+        "packages": {"type": "object", "additionalProperties": {"type": ["string", "null"]}}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message", "count", "examples"],
+      "properties": {
+        "code": {"type": "string"},
+        "severity": {"enum": ["error", "warning"]},
+        "message": {"type": "string"},
+        "count": {"$ref": "#/$defs/count"},
+        "examples": {"type": "array", "items": {"type": "string"}, "maxItems": 20}
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "required": ["count", "min", "p1", "p5", "median", "p95", "p99", "max", "mean", "histogram"],
+      "properties": {
+        "count": {"$ref": "#/$defs/count"},
+        "min": {"type": ["number", "null"]},
+        "median": {"type": ["number", "null"]},
+        "max": {"type": ["number", "null"]},
+        "histogram": {
+          "type": "object",
+          "required": ["edges", "counts"],
+          "properties": {
+            "edges": {"type": "array", "items": {"type": "number"}},
+            "counts": {"type": "array", "items": {"$ref": "#/$defs/count"}}
+          }
+        }
+      }
+    },
+    "flags": {
+      "type": "object",
+      "required": ["total_images", "status", "images_flagged", "note", "tags", "severity", "cooccurrence", "combinations"],
+      "properties": {
+        "total_images": {"$ref": "#/$defs/count"},
+        "status": {"$ref": "#/$defs/status_shares"},
+        "images_flagged": {"$ref": "#/$defs/share"},
+        "note": {"type": "string"},
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tag", "category", "severity", "count", "of", "pct", "by_status"],
+            "properties": {
+              "tag": {"type": "string"},
+              "severity": {"$ref": "#/$defs/severity"},
+              "count": {"$ref": "#/$defs/count"},
+              "by_status": {
+                "type": "object",
+                "required": ["ok", "review", "drop"],
+                "additionalProperties": {"$ref": "#/$defs/count"}
+              }
+            }
+          }
+        },
+        "severity": {
+          "type": "object",
+          "required": ["any", "worst"],
+          "properties": {
+            "any": {"type": "object", "additionalProperties": {"$ref": "#/$defs/share"}},
+            "worst": {"type": "object", "additionalProperties": {"$ref": "#/$defs/share"}}
+          }
+        },
+        "cooccurrence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tags", "count", "of", "pct", "given"],
+            "properties": {
+              "tags": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2},
+              "given": {"type": "object", "additionalProperties": {"$ref": "#/$defs/share"}}
+            }
+          }
+        },
+        "combinations": {
+          "type": "object",
+          "required": ["distinct", "top"],
+          "properties": {
+            "distinct": {"$ref": "#/$defs/count"},
+            "top": {
+              "type": "array",
+              "items": {"type": "object", "required": ["tags", "count", "of", "pct"],
+                        "properties": {"tags": {"type": "array", "items": {"type": "string"}, "minItems": 1}}}
+            }
+          }
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "required": ["total_images", "files", "decodable", "undecodable", "extensions", "categorical",
+                   "distributions", "resolutions", "thresholds", "folders"],
+      "properties": {
+        "total_images": {"$ref": "#/$defs/count"},
+        "files": {
+          "type": "object",
+          "required": ["file_count", "total_bytes", "missing_files"],
+          "additionalProperties": {"$ref": "#/$defs/count"}
+        },
+        "decodable": {"$ref": "#/$defs/share"},
+        "undecodable": {"$ref": "#/$defs/share"},
+        "extensions": {
+          "type": "object",
+          "required": ["available"],
+          "properties": {"available": {"type": "boolean"}, "mismatched": {"$ref": "#/$defs/share"}}
+        },
+        "categorical": {
+          "type": "object",
+          "required": ["metrics", "unavailable"],
+          "properties": {
+            "metrics": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["values", "missing"],
+                "properties": {
+                  "values": {"type": "array", "items": {"type": "object", "required": ["value", "count", "of", "pct"]}},
+                  "missing": {"$ref": "#/$defs/share"}
+                }
+              }
+            },
+            "unavailable": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "distributions": {
+          "type": "object",
+          "required": ["metrics", "unavailable"],
+          "properties": {
+            "metrics": {"type": "object", "additionalProperties": {"$ref": "#/$defs/distribution"}},
+            "unavailable": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "resolutions": {"type": "object", "required": ["available"]},
+        "thresholds": {
+          "type": "object",
+          "required": ["margin", "thresholds", "unavailable"],
+          "properties": {
+            "margin": {"type": "number"},
+            "thresholds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["column", "check", "parameter", "kind", "threshold", "flagged", "borderline",
+                             "borderline_range", "borderline_flagged", "borderline_passing"],
+                "properties": {
+                  "kind": {"enum": ["min", "max"]},
+                  "threshold": {"type": "number"},
+                  "flagged": {"$ref": "#/$defs/share"},
+                  "borderline": {"$ref": "#/$defs/share"}
+                }
+              }
+            },
+            "unavailable": {
+              "type": "array",
+              "items": {"type": "object", "required": ["parameter", "column", "reason"]}
+            }
+          }
+        },
+        "folders": {
+          "type": "object",
+          "required": ["folders", "depths", "tag_concentration"],
+          "properties": {
+            "folders": {"type": "array", "items": {"type": "object", "required": ["folder", "count", "of", "pct", "flagged", "top_tag"]}},
+            "depths": {"type": "array", "items": {"type": "object", "required": ["depth", "count", "of", "pct"]}},
+            "tag_concentration": {"type": "array", "items": {"type": "object", "required": ["tag", "folder", "count", "of", "pct"]}}
+          }
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["size", "folders", "status", "kept", "members", "members_truncated", "chaining_suspect", "similarity"],
+      "properties": {
+        "size": {"type": "integer", "minimum": 2},
+        "members": {"type": "array", "items": {"type": "string", "pattern": "^[^/]"}, "maxItems": 50},
+        "kept": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+        "chaining_suspect": {"type": "boolean"},
+        "similarity": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "object", "required": ["model", "members_with_embeddings", "mean_pairwise_cosine"],
+             "properties": {"mean_pairwise_cosine": {"type": ["number", "null"], "minimum": -1, "maximum": 1}}}
+          ]
+        }
+      }
+    },
+    "redundancy": {
+      "type": "object",
+      "required": ["groups", "images_in_groups", "redundant", "unique"],
+      "properties": {
+        "groups": {"$ref": "#/$defs/count"},
+        "images_in_groups": {"$ref": "#/$defs/share"},
+        "redundant": {"$ref": "#/$defs/share"},
+        "unique": {"$ref": "#/$defs/share"}
+      }
+    },
+    "duplicates": {
+      "type": "object",
+      "required": ["total_images", "columns", "levels", "matches_split_group", "similarity_models", "similarity_unavailable"],
+      "properties": {
+        "total_images": {"$ref": "#/$defs/count"},
+        "columns": {
+          "type": "object",
+          "additionalProperties": {
+            "allOf": [
+              {"$ref": "#/$defs/redundancy"},
+              {
+                "type": "object",
+                "required": ["column", "kind", "size_histogram", "largest", "chaining", "cross_folder"],
+                "properties": {
+                  "kind": {"enum": ["exact", "duplicate", "split", "embedding"]},
+                  "size_histogram": {"type": "array", "items": {"type": "object", "required": ["size", "groups"]}},
+                  "largest": {"type": "array", "items": {"$ref": "#/$defs/group"}},
+                  "chaining": {
+                    "type": "object",
+                    "required": ["size_limit", "suspects", "groups"],
+                    "properties": {"groups": {"type": "array", "items": {"$ref": "#/$defs/group"}}}
+                  },
+                  "cross_folder": {
+                    "allOf": [{"type": "object", "required": ["count", "of", "pct", "folder_pairs"]}]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {"$ref": "#/$defs/redundancy"},
+              {"type": "object", "required": ["level", "columns", "added_redundant"]}
+            ]
+          }
+        },
+        "matches_split_group": {"type": ["boolean", "null"]},
+        "similarity_models": {"type": "array", "items": {"type": "string"}},
+        "similarity_unavailable": {"type": "array", "items": {"type": "object", "required": ["model", "reason"]}}
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["status", "error", "started_at", "finished_at", "duration_s", "params", "stats", "changes",
+                   "git_commit", "git_dirty", "paths_digest_matches", "earlier_runs"],
+      "properties": {
+        "status": {"enum": ["ok", "failed"]},
+        "params": {"type": "object"},
+        "stats": {"type": "object"},
+        "paths_digest_matches": {"type": "boolean"},
+        "earlier_runs": {"$ref": "#/$defs/count"}
+      }
+    }
+  }
+}
