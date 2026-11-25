@@ -108,13 +108,13 @@ class DatasetArgs:
     group_embeddings: bool = arg("Group images whose embeddings have cosine similarity >= --embedding_threshold (embeds them first if needed)", "Semantic embeddings", default=False)
     embedding_model_name: str = arg("Model used to compute the embeddings", "Semantic embeddings", default='alexnet')
     embedding_threshold: float = arg("Min cosine similarity for two embeddings to count as near duplicates", "Semantic embeddings", default=0.95)
-    embedding_batch_size: int = arg("Batch size used when computing embeddings", "Semantic embeddings", default=128)
+    embedding_batch_size: int = arg("Batch size used when computing embeddings (--make_general_embeddings, and --group_embeddings when there is no usable cache)", "Semantic embeddings", default=128)
     
     make_expert_embeddings: bool = arg("Compute domain expert embeddings for the images not dropped and save them, replacing any cached ones", "Domain expert", default=False)
     group_expert_embeddings: bool = arg("Group images whose domain expert embeddings have cosine similarity >= --domain_expert_threshold (embeds them first if needed)", "Domain expert", default=False)
     domain_expert_model_names: tuple = arg("Names of the domain expert models to apply one by one, e.g. --domain_expert_model_names facenet-vggface2 facenet-casia-webface", "Domain expert", default=('facenet-vggface2',), choices=['facenet-vggface2', 'facenet-casia-webface'])
     domain_expert_threshold: float = arg("Min cosine similarity for two domain expert embeddings to count as near duplicates", "Domain expert", default=0.95)
-    domain_expert_batch_size: int = arg("Batch size used when computing domain expert embeddings", "Domain expert", default=128)
+    domain_expert_batch_size: int = arg("Batch size used when computing domain expert embeddings (--make_expert_embeddings, and --group_expert_embeddings when there is no usable cache)", "Domain expert", default=128)
 
     report: bool = arg("Write validation_report.json, the CSV exports and the summary (report.html, report.md) "
                        "to <resultdir>/report/. Runs after the enabled checks, or on its own against an existing manifest", "Report", default=False)
@@ -224,7 +224,8 @@ def dataset_cli(args: argparse.Namespace):
         if not dataset.has_hash():
             print("Hashing images before grouping by embeddings...")
             make_hashes(dataset)
-        group_by_embeddings(dataset, model_name=data_args.embedding_model_name, threshold=data_args.embedding_threshold)
+        group_by_embeddings(dataset, model_name=data_args.embedding_model_name, threshold=data_args.embedding_threshold,
+                            batch_size=data_args.embedding_batch_size)
         
     if data_args.make_expert_embeddings:
         if not dataset.has_hash():
@@ -239,7 +240,8 @@ def dataset_cli(args: argparse.Namespace):
             print("Hashing images before grouping by domain expert embeddings...")
             make_hashes(dataset)
         for model_name in data_args.domain_expert_model_names:
-            group_by_embeddings(dataset, model_name=model_name, threshold=data_args.domain_expert_threshold)
+            group_by_embeddings(dataset, model_name=model_name, threshold=data_args.domain_expert_threshold,
+                                batch_size=data_args.domain_expert_batch_size)
     print(f"Remaining images after validation: {len(dataset.df)}")
 
     if data_args.report:

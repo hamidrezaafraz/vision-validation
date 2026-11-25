@@ -133,6 +133,15 @@ class TestDatasetCliEmbeddings:
         run(delivery, "--make_general_embeddings", "--embedding_model_name", "alexnet")
         assert calls == [("make", "alexnet")]
 
+    def test_group_flags_pass_their_own_batch_size(self, delivery, monkeypatch):
+        import src.cli.dataset as cli
+        seen = []
+        monkeypatch.setattr(cli, "group_by_embeddings",
+                            lambda ds, model_name, threshold, batch_size: seen.append((model_name, batch_size)))
+        run(delivery, "--group_embeddings", "--embedding_batch_size", "16",
+            "--group_expert_embeddings", "--domain_expert_batch_size", "8")
+        assert seen == [("alexnet", 16), ("facenet-vggface2", 8)]
+
     def test_make_expert_embeddings_always_recomputes_every_model(self, delivery, calls):
         run(delivery, "--make_expert_embeddings", "--domain_expert_model_names", "facenet-vggface2", "facenet-casia-webface")
         assert calls == [("make", "facenet-vggface2"), ("make", "facenet-casia-webface")]

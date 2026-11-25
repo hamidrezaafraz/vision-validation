@@ -144,7 +144,7 @@ def cached_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_
     return emb
 
 @audited("group_by_embeddings")
-def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95):
+def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95, batch_size=128):
     """
     Verify near embeddings in the dataset (rows not dropped). Merges the per-model
     'group_<model>_<threshold>' column (e.g. group_alexnet_0_95) and 'split_group';
@@ -153,14 +153,15 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
     Parameters:
     - dataset: ImageClassificationDataset instance
     - model_name: str, name of the model to use for embedding
-    - threshold: float, similarity threshold for considering embeddings as near
+    - threshold: float, min cosine similarity (inclusive) for two embeddings to count as near
+    - batch_size: int, batch size used when the embeddings have to be computed (no usable cache)
 
     Returns:
     - dict for the audit log: pairs_found, groups_found, images_in_groups, group_column
     """
         
     # Row i of emb is row i of dataset.df, which is what get_idx2idx maps back to manifest indices.
-    emb = cached_embeddings(dataset, model_name=model_name, batch_size=64)
+    emb = cached_embeddings(dataset, model_name=model_name, batch_size=batch_size)
     device = get_device()
 
     emb = torch.tensor(emb)
@@ -168,7 +169,7 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
 
     if len(pairs) > 0:
         groups = merge_pairs(pairs)
-        print(f"Found {len(pairs)} close embeddings with similarity <= {threshold}, merged into {len(groups)} groups.")
+        print(f"Found {len(pairs)} close embeddings with similarity >= {threshold}, merged into {len(groups)} groups.")
         idx2idx = dataset.get_idx2idx()
         groups = [[idx2idx[idx] for idx in g] for g in groups]
         # per-model column records which model linked the images; split_group takes the union

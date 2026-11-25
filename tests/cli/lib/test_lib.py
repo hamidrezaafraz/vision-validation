@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import src.cli.lib as lib
-from src.cli.lib import cached_embeddings, group_by_perceptual_hash, make_and_save_embeddings, make_perceptual_hashes
+from src.cli.lib import cached_embeddings, group_by_embeddings, group_by_perceptual_hash, make_and_save_embeddings, make_perceptual_hashes
 from src.utils.dataset import ImageClassificationDataset, ImageDataset
 
 
@@ -115,3 +115,28 @@ class TestGroupByPerceptualHash:
         assert stats["images_in_groups"] == 4
         group_by_perceptual_hash(any_dataset, threshold=1, seed=0)
         assert len(fake_phash) == 1
+
+
+class TestGroupByEmbeddings:
+    @pytest.fixture
+    def batch_sizes(self, monkeypatch):
+        """make_embeddings stub that records its batch_size; rows 0 and 1 get the same vector, 2 and 3 differ."""
+        seen = []
+
+        def fake(dataset, model_name="alexnet", batch_size=128):
+            seen.append(batch_size)
+            return np.array([[1, 0], [1, 0], [0, 1], [-1, 0]], dtype=np.float32)[: len(dataset.df)]
+        monkeypatch.setattr(lib, "make_embeddings", fake)
+        return seen
+
+    def test_uses_the_given_batch_size(self, dataset, batch_sizes):
+        group_by_embeddings(dataset, "m", threshold=0.95, batch_size=7)
+        assert batch_sizes == [7]
+
+    def test_links_similar_rows_without_flagging(self, dataset, batch_sizes, capsys):
+        stats = group_by_embeddings(dataset, "m", threshold=0.95)
+        assert (stats["pairs_found"], stats["groups_found"], stats["images_in_groups"]) == (1, 1, 2)
+        m = dataset._manifest
+        assert m.loc[0, "split_group"] == m.loc[1, "split_group"] != m.loc[2, "split_group"]
+        assert (m["action"] == "").all() and (m["reason"] == "").all()
+        assert "similarity >= 0.95" in capsys.readouterr().out
