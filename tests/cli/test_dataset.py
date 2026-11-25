@@ -127,16 +127,15 @@ class TestDatasetCliEmbeddings:
         import src.cli.dataset as cli
         calls = []
         monkeypatch.setattr(cli, "make_and_save_embeddings", lambda ds, model_name, batch_size: calls.append(("make", model_name)))
-        monkeypatch.setattr(cli, "cached_embeddings", lambda ds, model_name, batch_size: calls.append(("cached", model_name)))
         return calls
 
     def test_make_general_embeddings_always_recomputes(self, delivery, calls):
         run(delivery, "--make_general_embeddings", "--embedding_model_name", "alexnet")
         assert calls == [("make", "alexnet")]
 
-    def test_make_expert_embeddings_still_uses_the_cache(self, delivery, calls):
-        run(delivery, "--make_expert_embeddings")
-        assert calls == [("cached", "facenet-vggface2")]
+    def test_make_expert_embeddings_always_recomputes_every_model(self, delivery, calls):
+        run(delivery, "--make_expert_embeddings", "--domain_expert_model_names", "facenet-vggface2", "facenet-casia-webface")
+        assert calls == [("make", "facenet-vggface2"), ("make", "facenet-casia-webface")]
 
 
 class TestFromNamespace:

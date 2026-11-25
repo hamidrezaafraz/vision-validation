@@ -6,7 +6,7 @@ from src.photometric import check_photometric
 from src.utils.dataset import GROUP_KEEP_STRATEGIES, ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
-from src.cli.lib import cached_embeddings, make_and_save_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
+from src.cli.lib import make_and_save_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
 from src.integrity import check_decode
 from src.report import ReportConfig, generate_report
 from src.report.review_sheet import MAX_PER_SECTION
@@ -110,7 +110,7 @@ class DatasetArgs:
     embedding_threshold: float = arg("Min cosine similarity for two embeddings to count as near duplicates", "Semantic embeddings", default=0.95)
     embedding_batch_size: int = arg("Batch size used when computing embeddings", "Semantic embeddings", default=128)
     
-    make_expert_embeddings: bool = arg("Compute domain expert embeddings for every image and store the embeddings", "Domain expert", default=False)
+    make_expert_embeddings: bool = arg("Compute domain expert embeddings for the images not dropped and save them, replacing any cached ones", "Domain expert", default=False)
     group_expert_embeddings: bool = arg("Group images whose domain expert embeddings have cosine similarity >= --domain_expert_threshold (embeds them first if needed)", "Domain expert", default=False)
     domain_expert_model_names: tuple = arg("Names of the domain expert models to apply one by one, e.g. --domain_expert_model_names facenet-vggface2 facenet-casia-webface", "Domain expert", default=('facenet-vggface2',), choices=['facenet-vggface2', 'facenet-casia-webface'])
     domain_expert_threshold: float = arg("Min cosine similarity for two domain expert embeddings to count as near duplicates", "Domain expert", default=0.95)
@@ -230,8 +230,9 @@ def dataset_cli(args: argparse.Namespace):
         if not dataset.has_hash():
             print("Hashing images before computing domain expert embeddings...")
             make_hashes(dataset)
+        # Always recomputes (for dataset.df.index), like --make_general_embeddings.
         for model_name in data_args.domain_expert_model_names:
-            cached_embeddings(dataset, model_name=model_name, batch_size=data_args.domain_expert_batch_size)
+            make_and_save_embeddings(dataset, model_name=model_name, batch_size=data_args.domain_expert_batch_size)
 
     if data_args.group_expert_embeddings:
         if not dataset.has_hash():
