@@ -77,3 +77,43 @@ class TestLoadDownscaled:
         full = arr.astype(np.float32) / 255
         assert result.mean_brightness == pytest.approx(full.mean(), abs=0.005)
         assert result.pixel_std == pytest.approx(full.std(), rel=0.05)
+
+
+class TestSolidColors:
+    """A solid frame of any hue is blank; per-channel contrast and luminance clipping make that so."""
+
+    @pytest.mark.parametrize("color", [(255, 0, 0), (0, 0, 255), (0, 255, 0), (128, 128, 128), (0, 0, 0)])
+    def test_solid_frame_has_no_contrast(self, tmp_path, color):
+        path = tmp_path / "solid.png"
+        Image.new("RGB", (64, 64), color).save(path)
+        assert _inspect_single_photometric(path).pixel_std == 0.0
+
+    def test_pure_red_is_not_dark_or_bright(self, tmp_path):
+        path = tmp_path / "red.png"
+        Image.new("RGB", (64, 64), (255, 0, 0)).save(path)
+        result = _inspect_single_photometric(path)
+        assert (result.dark_clip_ratio, result.bright_clip_ratio) == (0.0, 0.0)
+        assert result.mean_brightness == pytest.approx(0.299, abs=1e-3)
+
+    def test_black_and_white_are_clipped(self, tmp_path):
+        black, white = tmp_path / "black.png", tmp_path / "white.png"
+        Image.new("RGB", (64, 64), (0, 0, 0)).save(black)
+        Image.new("RGB", (64, 64), (255, 255, 255)).save(white)
+        assert _inspect_single_photometric(black).dark_clip_ratio == 1.0
+        assert _inspect_single_photometric(white).bright_clip_ratio == 1.0
+
+    def test_contrast_in_one_channel_counts(self, tmp_path):
+        arr = np.zeros((64, 64, 3), dtype=np.uint8)
+        arr[:, 32:, 2] = 255  # left black, right blue
+        path = tmp_path / "split.png"
+        Image.fromarray(arr).save(path)
+        assert _inspect_single_photometric(path).pixel_std == pytest.approx(0.5, abs=1e-3)
+
+    def test_check_photometric_flags_solid_red_as_blank(self, tmp_path):
+        from src.photometric import check_photometric
+        from src.utils.dataset import ImageDataset
+        (tmp_path / "Data" / "A").mkdir(parents=True)
+        Image.new("RGB", (64, 64), (255, 0, 0)).save(tmp_path / "Data" / "A" / "red.png")
+        ds = ImageDataset(str(tmp_path / "Data"), str(tmp_path / "results"))
+        check_photometric(ds)
+        assert ds._manifest.loc[0, "reason"] == "blank_or_solid"

@@ -77,8 +77,16 @@ class ClassificationArgs:
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> "ClassificationArgs":
-        """Picks this class's fields out of a parsed namespace, ignoring extras like `command`."""
-        return cls(**{f.name: getattr(args, f.name) for f in fields(cls)})
+        """
+        Picks this class's fields out of a parsed namespace, ignoring extras like `command`.
+        nargs="+" flags parse to lists; tuple fields get them back as tuples, so the result equals one
+        built directly (and stays immutable like the defaults).
+        """
+        values = {f.name: getattr(args, f.name) for f in fields(cls)}
+        for f in fields(cls):
+            if f.type is tuple and isinstance(values[f.name], list):
+                values[f.name] = tuple(values[f.name])
+        return cls(**values)
 
 
 def classification_cli(args: argparse.Namespace):

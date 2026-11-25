@@ -269,3 +269,80 @@ class TestSimilarPairs:
 
     def test_empty_input(self):
         assert similar_pairs(torch.empty(0, 4), thr=0.5).shape == (0, 2)
+
+
+@pytest.fixture(params=["unlabeled", "labeled"])
+def any_dataset(request, make_image_folder, tmp_path):
+    """Both dataset classes over 4 images; the embedding cache methods are shared."""
+    root = make_image_folder({"Happy": [(i * 40, 0, 0) for i in range(2)], "Sad": [(0, i * 40, 0) for i in range(2)]})
+    cls = ImageDataset if request.param == "unlabeled" else ImageClassificationDataset
+    return cls(root, str(tmp_path / "results"))
+
+
+class TestSaveEmbeddings:
+    def test_writes_matrix_and_row_indices(self, any_dataset):
+        any_dataset.save_embeddings(np.eye(4), "m", indices=[0, 1, 2, 3])
+        matrix_path, indices_path = any_dataset._embedding_paths("m")
+        assert np.load(matrix_path).shape == (4, 4)
+        assert np.load(indices_path).tolist() == [0, 1, 2, 3]
+
+    def test_accepts_tensors(self, any_dataset):
+        any_dataset.save_embeddings(torch.ones(2, 3), "m", indices=[1, 3])
+        assert np.load(any_dataset._embedding_paths("m")[0]).shape == (2, 3)
+
+    def test_length_mismatch(self, any_dataset):
+        with pytest.raises(ValueError, match="3 embeddings but 2 indices"):
+            any_dataset.save_embeddings(np.eye(3), "m", indices=[0, 1])
+
+
+class TestLoadEmbeddings:
+    def matrix(self):
+        return np.arange(8, dtype=np.float32).reshape(4, 2)  # row i = [2i, 2i+1]
+
+    def test_round_trip_for_non_dropped_rows(self, any_dataset):
+        any_dataset.save_embeddings(self.matrix(), "m", indices=[0, 1, 2, 3])
+        assert np.array_equal(any_dataset.load_embeddings("m"), self.matrix())
+
+    def test_rows_follow_the_manifest_not_the_file_position(self, any_dataset):
+        """The stale-cache bug: the cache was made when other rows were kept."""
+        any_dataset.save_embeddings(self.matrix()[[3, 0, 1]], "m", indices=[3, 0, 1])
+        any_dataset._manifest.loc[2, "action"] = "drop"
+        loaded = any_dataset.load_embeddings("m")  # rows 0, 1, 3 now
+        assert loaded.tolist() == [[0, 1], [2, 3], [6, 7]]
+
+    def test_cache_missing_a_row_is_recomputed(self, any_dataset):
+        any_dataset.save_embeddings(self.matrix()[:3], "m", indices=[0, 1, 2])
+        assert any_dataset.load_embeddings("m") is None  # row 3 is not dropped but not cached
+
+    def test_cache_without_indices_is_not_used(self, any_dataset):
+        np.save(any_dataset._embedding_paths("m")[0], self.matrix())
+        assert any_dataset.load_embeddings("m") is None
+
+    def test_explicit_indices(self, any_dataset):
+        any_dataset.save_embeddings(self.matrix(), "m", indices=[0, 1, 2, 3])
+        assert any_dataset.load_embeddings("m", indices=[2, 0]).tolist() == [[4, 5], [0, 1]]
+
+    def test_no_cache(self, any_dataset):
+        assert any_dataset.load_embeddings("m") is None
+
+
+class TestRestart:
+    def test_resets_per_model_group_columns(self, make_image_folder, tmp_path):
+        root = make_image_folder({"Happy": [(10, 0, 0), (20, 0, 0), (30, 0, 0)]})
+        ds = ImageDataset(root, str(tmp_path / "results"))
+        column = embedding_group_column("alexnet", 0.95)
+        ds.group([[0, 1, 2]], column=column)
+        assert ds._manifest[column].nunique() == 1
+        ds.restart()
+        assert ds._manifest[column].nunique() == 3
+        assert ds._manifest["split_group"].nunique() == 3
+
+    def test_new_links_are_not_merged_into_old_ones(self, make_image_folder, tmp_path):
+        root = make_image_folder({"Happy": [(10, 0, 0), (20, 0, 0), (30, 0, 0), (40, 0, 0)]})
+        ds = ImageDataset(root, str(tmp_path / "results"))
+        column = embedding_group_column("alexnet", 0.95)
+        ds.group([[0, 1]], column=column)
+        ds.restart()
+        ds.group([[1, 2]], column=column)
+        sizes = ds._manifest.groupby(column).size()
+        assert sorted(sizes.tolist()) == [1, 1, 2]  # before the fix: one group of 3

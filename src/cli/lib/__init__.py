@@ -122,6 +122,20 @@ def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_na
     emb = get_embeddings(model, dataset, batch_size=batch_size, device=device)
     return emb
 
+
+def cached_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
+    """
+    The embeddings of the rows not dropped (dataset.df.index), in that order: from the cache when it
+    covers those rows (see load_embeddings), otherwise computed and saved with their row indices.
+    """
+    emb = dataset.load_embeddings(model_name=model_name)
+    if emb is None:
+        indices = dataset.df.index
+        emb = make_embeddings(dataset, model_name=model_name, batch_size=batch_size)
+        dataset.save_embeddings(emb, model_name=model_name, indices=indices)
+        emb = np.asarray(emb)
+    return emb
+
 @audited("group_by_embeddings")
 def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", threshold=0.95):
     """
@@ -138,12 +152,8 @@ def group_by_embeddings(dataset: ImageDataset | ImageClassificationDataset, mode
     - dict for the audit log: pairs_found, groups_found, images_in_groups, group_column
     """
         
-    emb = dataset.load_embeddings(model_name=model_name)
-    if emb is None:
-        print("Embedding the full dataset...")
-        emb = make_embeddings(dataset, model_name=model_name, batch_size=64)
-        dataset.save_embeddings(emb, model_name=model_name)
-        
+    # Row i of emb is row i of dataset.df, which is what get_idx2idx maps back to manifest indices.
+    emb = cached_embeddings(dataset, model_name=model_name, batch_size=64)
     device = get_device()
 
     emb = torch.tensor(emb)

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from src.near_duplicates.embeddings import get_embeddings, get_model, similar_pairs, get_transform, get_device
 from src.near_duplicates.perceptual_hashes import get_perceptual_hashes, hamming_pairs
@@ -31,13 +32,15 @@ def verify_near_embeddings(dataset: ImageClassificationDataset, model_name="alex
     
     # sub_ds = Subset(dataset, dataset.df.index)
     
+    # Embeddings of dataset.df's rows, in that order (get_embeddings embeds exactly those). Row i maps
+    # back to a manifest index through get_idx2idx. The cache is only used when its saved row indices
+    # cover these rows; indexing it by manifest index, as before, picked the wrong rows.
     emb = dataset.load_embeddings(model_name=model_name)
     if emb is None:
+        indices = dataset.df.index
         emb = get_embeddings(model, dataset, batch_size=batch_size, device=device)
-        dataset.save_embeddings(emb, model_name=model_name)
-    
-    emb = emb[dataset.df.index]  # Ensure embeddings are in the same order as the dataset
-    emb = torch.tensor(emb)
+        dataset.save_embeddings(emb, model_name=model_name, indices=indices)
+    emb = torch.as_tensor(np.asarray(emb))
     pairs = similar_pairs(emb, thr=threshold, device=device)
 
     if len(pairs) > 0:

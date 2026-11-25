@@ -128,12 +128,27 @@ def _load_downscaled(img: Image.Image, max_side: int = STATS_MAX_SIDE) -> Image.
     return img
 
 
+def _luminance(norm: np.ndarray) -> np.ndarray:
+    """The (H, W) luminance plane in [0, 1] (ITU-R BT.601 weights); grayscale arrays are returned as they are."""
+    if norm.ndim == 2:
+        return norm
+    return 0.299 * norm[..., 0] + 0.587 * norm[..., 1] + 0.114 * norm[..., 2]
+
+
+def _max_channel_std(norm: np.ndarray) -> float:
+    """
+    The largest per-channel standard deviation over the pixels. Computing one std over every value of
+    an (H, W, 3) array would also count the differences *between* channels: a solid pure red frame,
+    (1, 0, 0) everywhere, would get ~0.47 although no pixel differs from another. Per channel it is 0.
+    """
+    if norm.ndim == 2:
+        return float(norm.std())
+    return float(norm.reshape(-1, norm.shape[-1]).std(axis=0).max())
+
+
 def _compute_laplacian_variance(norm: np.ndarray) -> float:
     """Computes discrete 2D Laplacian variance on a luminance plane shrunk to <= BLUR_REF_MAX_SIDE px."""
-    if norm.ndim == 2:
-        gray_01 = norm
-    else:
-        gray_01 = 0.299 * norm[..., 0] + 0.587 * norm[..., 1] + 0.114 * norm[..., 2]
+    gray_01 = _luminance(norm)
 
     h, w = gray_01.shape
     longest = max(h, w)
@@ -172,10 +187,15 @@ def _inspect_single_photometric(
     if norm.size == 0:
         return PhotometricResult.invalid()
 
-    mean_brightness = float(norm.mean())
-    pixel_std = float(norm.std())
-    dark_clip_ratio = float((norm <= clip_margin).mean())
-    bright_clip_ratio = float((norm >= (1.0 - clip_margin)).mean())
+    # Brightness and clipping are per pixel, on luminance: a pixel is clipped when it is (near) pure
+    # black or white, not when one of its channels is 0 or 1 (pure red has two channels at 0 but is not
+    # dark). Contrast is the largest per-channel std, so a solid color frame of any hue scores ~0.
+    # For grayscale images all three equal the old whole-array values.
+    luminance = _luminance(norm)
+    mean_brightness = float(luminance.mean())
+    pixel_std = _max_channel_std(norm)
+    dark_clip_ratio = float((luminance <= clip_margin).mean())
+    bright_clip_ratio = float((luminance >= (1.0 - clip_margin)).mean())
     blur_score = _compute_laplacian_variance(norm)
 
     return PhotometricResult(

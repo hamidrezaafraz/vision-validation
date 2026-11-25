@@ -118,3 +118,10 @@ class TestDatasetCliReport:
     def test_report_options_need_report(self, delivery, flags):
         with pytest.raises(SystemExit, match="add --report"):
             run(delivery, *flags)
+
+
+class TestFromNamespace:
+    def test_tuple_fields_stay_tuples(self):
+        data_args = DatasetArgs.from_namespace(parse(["--expected_modes", "RGB", "L"]))
+        assert data_args.expected_modes == ("RGB", "L")
+        assert data_args == DatasetArgs(datadir="data", resultdir="results", expected_modes=("RGB", "L"))

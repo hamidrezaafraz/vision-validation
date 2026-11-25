@@ -6,7 +6,7 @@ from src.photometric import check_photometric
 from src.utils.dataset import GROUP_KEEP_STRATEGIES, ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
-from src.cli.lib import make_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
+from src.cli.lib import cached_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
 from src.integrity import check_decode
 from src.report import ReportConfig, generate_report
 from src.report.review_sheet import MAX_PER_SECTION
@@ -145,8 +145,16 @@ class DatasetArgs:
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> "DatasetArgs":
-        """Picks this class's fields out of a parsed namespace, ignoring extras like `command`."""
-        return cls(**{f.name: getattr(args, f.name) for f in fields(cls)})
+        """
+        Picks this class's fields out of a parsed namespace, ignoring extras like `command`.
+        nargs="+" flags parse to lists; tuple fields get them back as tuples, so the result equals one
+        built directly (and stays immutable like the defaults).
+        """
+        values = {f.name: getattr(args, f.name) for f in fields(cls)}
+        for f in fields(cls):
+            if f.type is tuple and isinstance(values[f.name], list):
+                values[f.name] = tuple(values[f.name])
+        return cls(**values)
 
 
 
@@ -209,7 +217,7 @@ def dataset_cli(args: argparse.Namespace):
         if not dataset.has_hash():
             print("Hashing images before computing embeddings...")
             make_hashes(dataset)
-        make_embeddings(dataset, model_name=data_args.embedding_model_name, batch_size=data_args.embedding_batch_size)
+        cached_embeddings(dataset, model_name=data_args.embedding_model_name, batch_size=data_args.embedding_batch_size)
     
     if data_args.group_embeddings:
         if not dataset.has_hash():
@@ -222,7 +230,7 @@ def dataset_cli(args: argparse.Namespace):
             print("Hashing images before computing domain expert embeddings...")
             make_hashes(dataset)
         for model_name in data_args.domain_expert_model_names:
-            make_embeddings(dataset, model_name=model_name, batch_size=data_args.domain_expert_batch_size)
+            cached_embeddings(dataset, model_name=model_name, batch_size=data_args.domain_expert_batch_size)
 
     if data_args.group_expert_embeddings:
         if not dataset.has_hash():

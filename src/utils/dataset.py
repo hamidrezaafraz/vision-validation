@@ -17,6 +17,8 @@ from torchvision import datasets
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
+logger = Logger(__name__)
+
 
 # How keep_one_from_group picks the survivor of each duplicate group.
 GROUP_KEEP_STRATEGIES = ("random",)
@@ -73,6 +75,44 @@ class GroupColumnsMixin:
 
     def _after_split_group_change(self):
         pass
+
+    def _embedding_paths(self, model_name: str) -> tuple[str, str]:
+        base = os.path.join(self._embeddings_dir, model_name)
+        return f"{base}_embeddings.npy", f"{base}_embeddings_indices.npy"
+
+    def save_embeddings(self, embeddings, model_name: str, indices):
+        """
+        Saves the embedding matrix to <model>_embeddings.npy and, row for row, the manifest index of each
+        embedding to <model>_embeddings_indices.npy. Without the indices, row i would only mean "the i-th
+        row not dropped at the time", which changes whenever a rerun keeps different images.
+        """
+        embeddings, indices = np.asarray(embeddings), np.asarray(indices)
+        if len(embeddings) != len(indices):
+            raise ValueError(f"{len(embeddings)} embeddings but {len(indices)} indices")
+        matrix_path, indices_path = self._embedding_paths(model_name)
+        os.makedirs(self._embeddings_dir, exist_ok=True)
+        np.save(matrix_path, embeddings)
+        np.save(indices_path, indices)
+
+    def load_embeddings(self, model_name: str, indices=None):
+        """
+        The cached embeddings of the rows `indices` (default: the rows not dropped, self.df.index), in that
+        order, or None when they have to be computed: no cache, a cache saved without row indices (older
+        caches; their rows can't be matched to the manifest), or a cache that lacks any of the rows.
+        A cache holding more rows than needed is fine; only the requested ones are returned.
+        """
+        matrix_path, indices_path = self._embedding_paths(model_name)
+        if not os.path.exists(matrix_path):
+            return None
+        if not os.path.exists(indices_path):
+            logger.warning(f"{matrix_path} has no row indices; recomputing the {model_name} embeddings")
+            return None
+        matrix, cached = np.load(matrix_path, mmap_mode="r"), pd.Index(np.load(indices_path))
+        wanted = pd.Index(self.df.index if indices is None else indices)
+        if len(matrix) != len(cached) or not cached.is_unique or not wanted.isin(cached).all():
+            logger.info(f"Cached {model_name} embeddings don't cover the current rows; recomputing")
+            return None
+        return np.asarray(matrix[cached.get_indexer(wanted)])
 
     def _select_one_per_group(self, eligible: pd.Series, group_keep_strategy: str = "random", seed=None) -> pd.Index:
         """
@@ -191,15 +231,6 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
                 self._manifest[col] = series.map(lambda v: mapping.get(v, v))     
                 
                  
-    def save_embeddings(self, embeddings, model_name):
-        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
-        np.save(embeddings_path, embeddings)
-    
-    def load_embeddings(self, model_name):
-        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
-        if os.path.exists(embeddings_path):
-            return np.load(embeddings_path)
-        return None
     
     def save_perceptual_hashes(self, indices, hashes, hash_name):
         hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
@@ -247,10 +278,13 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
         self._manifest.to_csv(self._manifest_path, index=False)
     
     def restart(self):
-        """Gives every row a fresh group_id/split_group and clears action and reason.
-        Other columns (hash, perceptual_hash, ...) are left untouched."""
+        """Gives every row a fresh group_id/split_group and per-model group column (group_<model>_<thr>),
+        and clears action and reason. Without resetting the per-model columns, group() would merge each
+        run's links into the previous runs'. Other columns (hash, metrics, ...) are left untouched."""
         self._manifest["group_id"] = [str(uuid.uuid4()) for _ in range(len(self._manifest))]
         self._manifest["split_group"] = self._manifest["group_id"]
+        for column in self.group_columns():
+            self._manifest[column] = [str(uuid.uuid4()) for _ in range(len(self._manifest))]
         self._manifest["action"] = ""
         self._manifest["reason"] = ""
         self.save_manifest()
@@ -339,15 +373,6 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
         n_labels = self._manifest.groupby('split_group')['label'].transform('nunique')
         self._manifest['label_conflict'] = n_labels > 1
             
-    def save_embeddings(self, embeddings, model_name):
-        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
-        np.save(embeddings_path, embeddings)
-    
-    def load_embeddings(self, model_name):
-        embeddings_path = os.path.join(self._embeddings_dir, f"{model_name}_embeddings.npy")
-        if os.path.exists(embeddings_path):
-            return np.load(embeddings_path)
-        return None
     def save_perceptual_hashes(self, hashes, hash_name):
         hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
         np.save(hashes_path, hashes)
