@@ -1,0 +1,193 @@
+<mxfile host="65bd71144e">
+    <diagram id="dataset-cli-init" name="1 · dataset CLI → ImageDataset">
+        <mxGraphModel dx="761" dy="412" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1950" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="laneA" parent="1" style="swimlane;html=1;startSize=40;fillColor=#f9f9f9;strokeColor=#999999;fontStyle=1;fontSize=13;collapsible=0;" value="main.py" vertex="1">
+                    <mxGeometry height="1880" width="260" as="geometry"/>
+                </mxCell>
+                <mxCell id="A1" parent="laneA" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" value="uv run python main.py data&lt;br&gt;--datadir … --resultdir …&lt;br&gt;[check / group / report flags]" vertex="1">
+                    <mxGeometry height="80" width="220" x="20" y="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="A2" parent="laneA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;main()&lt;/b&gt;&lt;br&gt;ArgumentParser + subparsers" vertex="1">
+                    <mxGeometry height="60" width="220" x="20" y="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="A3" parent="laneA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="add_parser(&#39;data&#39;,&lt;br&gt;parents=[DatasetArgs.get_parser()])" vertex="1">
+                    <mxGeometry height="70" width="220" x="20" y="280" as="geometry"/>
+                </mxCell>
+                <mxCell id="A4" parent="laneA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="parser.parse_args() → Namespace" vertex="1">
+                    <mxGeometry height="50" width="220" x="20" y="420" as="geometry"/>
+                </mxCell>
+                <mxCell id="A5" parent="laneA" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="&lt;b&gt;args.command?&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="110" width="180" x="40" y="510" as="geometry"/>
+                </mxCell>
+                <mxCell id="A6" parent="laneA" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=6;spacingRight=6;verticalAlign=top;fontSize=11;" value="cls → classification_cli()&lt;br&gt;seg → NotImplementedError&lt;br&gt;none → print_help()" vertex="1">
+                    <mxGeometry height="80" width="220" x="20" y="660" as="geometry"/>
+                </mxCell>
+                <mxCell id="A7" parent="laneA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="&lt;b&gt;SystemExit&lt;/b&gt;&lt;br&gt;&#39;--review_sheet, --force … only apply to the report; add --report.&#39;" vertex="1">
+                    <mxGeometry height="90" width="220" x="20" y="790" as="geometry"/>
+                </mxCell>
+                <mxCell id="A8" parent="laneA" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=6;spacingRight=6;verticalAlign=top;fontSize=11;" value="&lt;b&gt;Design notes&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Init only lists files. Opening/decoding them is check_decode&#39;s job (next step).&lt;br&gt;&lt;br&gt;• An existing manifest wins: files added to or removed from datadir later are not reconciled, yet __len__/__getitem__ use self.paths, so the two can disagree.&lt;br&gt;&lt;br&gt;• Every row gets its own UUID group_id; group() later merges duplicates into shared ids.&lt;br&gt;&lt;br&gt;• The audit log gets an entry only when the manifest is created, not when it is read." vertex="1">
+                    <mxGeometry height="330" width="240" x="10" y="1000" as="geometry"/>
+                </mxCell>
+                <mxCell id="laneB" parent="1" style="swimlane;html=1;startSize=40;fillColor=#f9f9f9;strokeColor=#999999;fontStyle=1;fontSize=13;collapsible=0;" value="src/cli/dataset.py" vertex="1">
+                    <mxGeometry height="1880" width="380" x="260" as="geometry"/>
+                </mxCell>
+                <mxCell id="B1" parent="laneB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;DatasetArgs.get_parser()&lt;/b&gt;&lt;br&gt;one argument group per GROUPS entry;&lt;br&gt;each dataclass field → --field_name:&lt;br&gt;bool → store_true · tuple → nargs=&#39;+&#39;&lt;br&gt;no default → required (datadir, resultdir)" vertex="1">
+                    <mxGeometry height="130" width="340" x="20" y="310" as="geometry"/>
+                </mxCell>
+                <mxCell id="B2" parent="laneB" style="shape=process;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;size=0.04;" value="&lt;b&gt;dataset_cli(args)&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="50" width="340" x="20" y="540" as="geometry"/>
+                </mxCell>
+                <mxCell id="B3" parent="laneB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;DatasetArgs.from_namespace(args)&lt;/b&gt;&lt;br&gt;keep only dataclass fields; lists → tuples" vertex="1">
+                    <mxGeometry height="60" width="340" x="20" y="630" as="geometry"/>
+                </mxCell>
+                <mxCell id="B4" parent="laneB" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="report-only flag set&lt;br&gt;(--review_sheet, --force,&lt;br&gt;--max_per_section)&lt;br&gt;without --report?" vertex="1">
+                    <mxGeometry height="130" width="260" x="60" y="730" as="geometry"/>
+                </mxCell>
+                <mxCell id="B5" parent="laneB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="print datadir / resultdir" vertex="1">
+                    <mxGeometry height="50" width="340" x="20" y="910" as="geometry"/>
+                </mxCell>
+                <mxCell id="B6" parent="laneB" style="shape=process;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;size=0.04;" value="&lt;b&gt;ImageDataset(datadir, resultdir)&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="50" width="340" x="20" y="1000" as="geometry"/>
+                </mxCell>
+                <mxCell id="B7" parent="laneB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" value="dataset ready → next diagram:&lt;br&gt;--restart → enabled checks in order&lt;br&gt;→ --report" vertex="1">
+                    <mxGeometry height="90" width="340" x="20" y="1760" as="geometry"/>
+                </mxCell>
+                <mxCell id="laneC" parent="1" style="swimlane;html=1;startSize=40;fillColor=#f9f9f9;strokeColor=#999999;fontStyle=1;fontSize=13;collapsible=0;" value="src/utils/dataset.py  ·  ImageDataset" vertex="1">
+                    <mxGeometry height="1880" width="400" x="640" as="geometry"/>
+                </mxCell>
+                <mxCell id="C1" parent="laneC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;__init__&lt;/b&gt;: store data_dir, result_dir, transform" vertex="1">
+                    <mxGeometry height="50" width="340" x="30" y="1000" as="geometry"/>
+                </mxCell>
+                <mxCell id="C2" parent="laneC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;self.paths = find_image_paths(data_dir)&lt;/b&gt;&lt;br&gt;(src/utils/images.py) os.walk, every file,&lt;br&gt;sorted · files are listed, not opened" vertex="1">
+                    <mxGeometry height="80" width="340" x="30" y="1090" as="geometry"/>
+                </mxCell>
+                <mxCell id="C3" parent="laneC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="makedirs(resultdir/embeddings)&lt;br&gt;(also creates resultdir)" vertex="1">
+                    <mxGeometry height="50" width="340" x="30" y="1210" as="geometry"/>
+                </mxCell>
+                <mxCell id="C4" parent="laneC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="_manifest_path = manifest.csv&lt;br&gt;_audit_path = audits.json" vertex="1">
+                    <mxGeometry height="50" width="340" x="30" y="1300" as="geometry"/>
+                </mxCell>
+                <mxCell id="C5" parent="laneC" style="shape=process;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;size=0.04;" value="&lt;b&gt;load_manifest()&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="40" width="340" x="30" y="1390" as="geometry"/>
+                </mxCell>
+                <mxCell id="C6" parent="laneC" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="manifest.csv&lt;br&gt;exists?" vertex="1">
+                    <mxGeometry height="100" width="200" x="100" y="1460" as="geometry"/>
+                </mxCell>
+                <mxCell id="C7" parent="laneC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;Read it&lt;/b&gt;&lt;br&gt;pd.read_csv(dtype=str…,&lt;br&gt;keep_default_na=False)&lt;br&gt;add split_group if missing&lt;br&gt;&lt;i&gt;disk is not rescanned&lt;/i&gt;" vertex="1">
+                    <mxGeometry height="140" width="180" x="10" y="1600" as="geometry"/>
+                </mxCell>
+                <mxCell id="C8" parent="laneC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;Create it&lt;/b&gt;&lt;br&gt;one row per path&lt;br&gt;group_id = uuid4&lt;br&gt;split_group = group_id&lt;br&gt;action = reason = &#39;&#39;&lt;br&gt;is_decodable=True, exif=1" vertex="1">
+                    <mxGeometry height="140" width="180" x="210" y="1600" as="geometry"/>
+                </mxCell>
+                <mxCell id="C9" parent="laneC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" value="self._manifest ready" vertex="1">
+                    <mxGeometry height="50" width="200" x="100" y="1780" as="geometry"/>
+                </mxCell>
+                <mxCell id="laneD" parent="1" style="swimlane;html=1;startSize=40;fillColor=#f9f9f9;strokeColor=#999999;fontStyle=1;fontSize=13;collapsible=0;" value="Disk: resultdir/  (e.g. emotion/results)" vertex="1">
+                    <mxGeometry height="1880" width="280" x="1040" as="geometry"/>
+                </mxCell>
+                <mxCell id="D1" parent="laneD" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#d5e8d4;strokeColor=#82b366;" value="embeddings/" vertex="1">
+                    <mxGeometry height="80" width="180" x="50" y="1190" as="geometry"/>
+                </mxCell>
+                <mxCell id="D2" parent="laneD" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#d5e8d4;strokeColor=#82b366;" value="manifest.csv" vertex="1">
+                    <mxGeometry height="80" width="180" x="50" y="1530" as="geometry"/>
+                </mxCell>
+                <mxCell id="D3" parent="laneD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=12;" value="&lt;b&gt;record_event(MANIFEST_CREATED)&lt;/b&gt;&lt;br&gt;(src/utils/audit.py) event, at,&lt;br&gt;manifest_rows, paths_digest, environment" vertex="1">
+                    <mxGeometry height="90" width="240" x="20" y="1660" as="geometry"/>
+                </mxCell>
+                <mxCell id="D4" parent="laneD" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#d5e8d4;strokeColor=#82b366;" value="audits.json&lt;br&gt;(appended)" vertex="1">
+                    <mxGeometry height="70" width="180" x="50" y="1780" as="geometry"/>
+                </mxCell>
+                <mxCell id="e0" edge="1" parent="1" source="A1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="A2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" edge="1" parent="1" source="A2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="A3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" edge="1" parent="1" source="A3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" target="B1" value="builds parent parser">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" edge="1" parent="1" source="B1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=0;exitY=0.75;entryX=1;entryY=0.5;" target="A4" value="flags">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" edge="1" parent="1" source="A3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="A4" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" edge="1" parent="1" source="A4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="A5" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6" edge="1" parent="1" source="A5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="B2" value="data">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" edge="1" parent="1" source="A5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="A6" value="other">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" edge="1" parent="1" source="B2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="B3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" edge="1" parent="1" source="B3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="B4" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10" edge="1" parent="1" source="B4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;fontColor=#b85450;" target="A7" value="yes">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11" edge="1" parent="1" source="B4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="B5" value="no">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e12" edge="1" parent="1" source="B5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="B6" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e13" edge="1" parent="1" source="B6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="C1" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e14" edge="1" parent="1" source="C1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="C2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e15" edge="1" parent="1" source="C2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="C3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e16" edge="1" parent="1" source="C3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="C4" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e17" edge="1" parent="1" source="C3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="D1" value="mkdir">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e18" edge="1" parent="1" source="C4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="C5" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e19" edge="1" parent="1" source="C5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="C6" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e20" edge="1" parent="1" source="C6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=0.5;entryY=0;" target="C7" value="yes">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e21" edge="1" parent="1" source="C6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" target="C8" value="no">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e22" edge="1" parent="1" source="D2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=0;exitY=0.5;entryX=0;entryY=0.25;" target="C7" value="read">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e23" edge="1" parent="1" source="C8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.3;entryX=0;entryY=0.7;" target="D2" value="to_csv">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e24" edge="1" parent="1" source="C8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.8;entryX=0;entryY=0.5;" target="D3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e25" edge="1" parent="1" source="D3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="D4" value="append">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e26" edge="1" parent="1" source="C7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" target="C9" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e27" edge="1" parent="1" source="C8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=1;entryY=0.5;" target="C9" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e28" edge="1" parent="1" source="C9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=1;entryY=0.75;" target="B7" value="returns">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

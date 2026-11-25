@@ -1,0 +1,93 @@
+<mxfile host="65bd71144e">
+    <diagram id="restart-flow" name="4 · restart()">
+        <mxGraphModel dx="863" dy="317" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="760" pageHeight="1010" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="&lt;b&gt;dataset.restart()&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;--restart flag, in dataset_cli&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="s1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Give every row a new group id&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;uuid.uuid4 → group_id&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="s2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Copy group_id into split_group&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;restart&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Find the per-model group columns&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;group_columns (e.g. group_alexnet_0_95)&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="300" as="geometry"/>
+                </mxCell>
+                <mxCell id="d1" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="&lt;b&gt;Another group column left?&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="85" width="200" x="150" y="417" as="geometry"/>
+                </mxCell>
+                <mxCell id="s4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Give every row a new id in that column&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;uuid.uuid4&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="460" y="430" as="geometry"/>
+                </mxCell>
+                <mxCell id="s5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Clear every row&#39;s action&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;action = &#39;&#39;&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="550" as="geometry"/>
+                </mxCell>
+                <mxCell id="s6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Clear every row&#39;s reason&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;reason = &#39;&#39;&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="640" as="geometry"/>
+                </mxCell>
+                <mxCell id="s7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;" value="&lt;b&gt;Save manifest.csv&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;save_manifest&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="730" as="geometry"/>
+                </mxCell>
+                <mxCell id="s8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;" value="&lt;b&gt;Log &#39;restart&#39; in audits.json&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;record_event&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="820" as="geometry"/>
+                </mxCell>
+                <mxCell id="end" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="&lt;b&gt;Back to dataset_cli&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;checks run on a clean manifest&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="260" x="120" y="920" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Legend&lt;/b&gt;&lt;br&gt;blue: in memory&lt;br&gt;green: touches disk (resultdir)&lt;br&gt;yellow: decision&lt;br&gt;&lt;font color=&#39;#666666&#39;&gt;grey text: the function that does it&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="100" width="200" x="460" y="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="kept" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Not touched&lt;/b&gt;&lt;br&gt;• path, hash and perceptual hash columns&lt;br&gt;• check results (blur_score, width, …)&lt;br&gt;• embeddings/ cache files&lt;br&gt;So a rerun can reuse them." vertex="1">
+                    <mxGeometry height="110" width="240" x="460" y="540" as="geometry"/>
+                </mxCell>
+                <mxCell id="audit" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Why the audit entry matters&lt;/b&gt;&lt;br&gt;The report only reads audit entries from the last restart on (current_audits), so checks run before it are no longer shown as current." vertex="1">
+                    <mxGeometry height="120" width="240" x="460" y="790" as="geometry"/>
+                </mxCell>
+                <mxCell id="e0" edge="1" parent="1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s1" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" edge="1" parent="1" source="s1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" edge="1" parent="1" source="s2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" edge="1" parent="1" source="s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="d1" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="s4" value="yes">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" edge="1" parent="1" source="s4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=0;entryX=0.5;entryY=0;" target="d1" value="next column">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="590" y="390"/>
+                            <mxPoint x="250" y="390"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e6" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s5" value="no">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" edge="1" parent="1" source="s5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s6" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" edge="1" parent="1" source="s6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s7" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" edge="1" parent="1" source="s7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s8" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10" edge="1" parent="1" source="s8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="end" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11" edge="1" parent="1" source="audit" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;endArrow=none;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" target="s8" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

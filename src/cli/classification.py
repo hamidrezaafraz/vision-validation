@@ -45,7 +45,7 @@ class ClassificationArgs:
     
     verify_near_duplicates: bool = arg("Group images with perceptual hashes within a Hamming distance threshold", "Near duplicates", default=False)
     perceptual_hash: str = arg("Perceptual hash function to use ('phash', 'average_hash', 'dhash', 'whash')", "Near duplicates", default='phash', choices=['phash', 'average_hash', 'dhash', 'whash'])
-    hamming_threshold: int = arg("Hamming distance threshold for perceptual hash comparison", "Near duplicates", default=1)
+    hamming_threshold: int = arg("Max Hamming distance (inclusive) for two perceptual hashes to count as near duplicates", "Near duplicates", default=1)
     
     verify_near_embeddings: bool = arg("Group images with embeddings within a cosine similarity threshold", "Semantic embeddings", default=False)
     embedding_model_name: str = arg("Name of the model to use for embedding generation", "Semantic embeddings", default='alexnet', choices=['alexnet', 'resnet50'])

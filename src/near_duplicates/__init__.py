@@ -64,25 +64,23 @@ def verify_near_duplicates(dataset: ImageClassificationDataset, hash_name='phash
     Parameters:
     - dataset: ImageClassificationDataset instance
     - hash_name: str, name of the hash function (default: 'phash')
-    - threshold: int, Hamming distance threshold for considering images as near duplicates
+    - threshold: int, max Hamming distance (inclusive) for two images to count as near duplicates
 
     Returns:
     - None
     """
-    # Compute perceptual hashes for all images in the dataset
+    # Row i of H is row i of dataset.df: the cache returns rows in that order, or None if it doesn't cover them.
     H = dataset.load_perceptual_hashes(hash_name=hash_name)
     if H is None:
-        H = get_perceptual_hashes(dataset._manifest['path'], hash_name)
-        dataset.save_perceptual_hashes(H, hash_name=hash_name)
-    
-    H = H[dataset.df.index]  # Ensure hashes are in the same order as the dataset
+        df = dataset.df
+        H = get_perceptual_hashes(df['path'], hash_name)
+        dataset.save_perceptual_hashes(H, hash_name=hash_name, indices=df.index)
 
-    # Find pairs of images with Hamming distance less than the threshold
+    # Pairs of images whose hashes differ in at most `threshold` bits
     pairs = hamming_pairs(H, threshold)
-    
 
     if len(pairs) > 0:
-        print(f"Found {len(pairs)} pairs of near duplicates with Hamming distance < {threshold}.")
+        print(f"Found {len(pairs)} pairs of near duplicates with Hamming distance <= {threshold}.")
         idx2idx = dataset.get_idx2idx()
         for i, d in enumerate(pairs):
             pairs[i] = [idx2idx[idx] for idx in d]

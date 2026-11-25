@@ -47,7 +47,8 @@ def get_perceptual_hashes(paths: list[str], hash_name: str = 'phash', rgb=False)
 def hamming_pairs(ndarray: np.ndarray, threshold: int, chunk_size: int = 2048):
     """
     ndarray:     (N, n_bits) binary (bool or 0/1) hashes, on any device
-    threshold:  pairs with Hamming distance < threshold are returned
+    threshold:  pairs with Hamming distance <= threshold are returned (inclusive, like --hamming_threshold
+                and the near_duplicate_<hash>_<threshold> tag: 0 means identical hashes only)
     chunk_size: number of rows compared against the rest per iteration
     returns:    (M, 2) numpy array of index pairs (i, j) with i < j
     """
@@ -67,7 +68,7 @@ def hamming_pairs(ndarray: np.ndarray, threshold: int, chunk_size: int = 2048):
         b = X[s:]                               # only compare against rows at or after the chunk (upper triangle)
         # for binary vectors: hamming(a, b) = |a| + |b| - 2 * (a . b)
         d = ones[s:s + chunk_size, None] + ones[None, s:] - 2 * (a @ b.T)
-        i, j = torch.where(d < threshold)
+        i, j = torch.where(d <= threshold)
         i, j = i + s, j + s
         keep = i < j                            # drops self-pairs and mirrored duplicates
         out.append(torch.stack([i[keep], j[keep]], dim=1).cpu())

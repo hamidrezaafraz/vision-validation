@@ -1,0 +1,162 @@
+<mxfile host="65bd71144e">
+    <diagram id="group-by-perceptual-hash-flow" name="8 · group_by_perceptual_hash">
+        <mxGraphModel dx="1384" dy="623" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1020" pageHeight="1770" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="&lt;b&gt;group_by_perceptual_hash(dataset, …)&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;--group_perceptual_hash, from dataset_cli&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="s0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Note the settings and start time&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;@audited&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="s1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Take the rows not dropped yet&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;dataset.df&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="s2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;" value="&lt;b&gt;Load the cached hashes&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;load_perceptual_hashes · embeddings/&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="d0" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="&lt;b&gt;Cache matches these rows, in order?&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="100" width="200" x="80" y="380" as="geometry"/>
+                </mxCell>
+                <mxCell id="h1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Hash how every image looks&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;get_perceptual_hashes · phash, 64 bits&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="380" y="400" as="geometry"/>
+                </mxCell>
+                <mxCell id="h2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;" value="&lt;b&gt;Save the hashes and their row ids&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;save_perceptual_hashes · embeddings/&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="380" y="490" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Compare every pair of hashes&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;hamming_pairs · chunked matmul on GPU/CPU&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="530" as="geometry"/>
+                </mxCell>
+                <mxCell id="s4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Keep pairs that differ in at most threshold bits&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;--hamming_threshold (inclusive)&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="620" as="geometry"/>
+                </mxCell>
+                <mxCell id="d1" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="&lt;b&gt;Any pairs?&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="100" width="200" x="80" y="710" as="geometry"/>
+                </mxCell>
+                <mxCell id="s5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Join chained pairs into groups&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;merge_pairs · a~b and b~c → {a, b, c}&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="860" as="geometry"/>
+                </mxCell>
+                <mxCell id="s6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Map hash positions back to manifest rows&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;get_idx2idx&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="950" as="geometry"/>
+                </mxCell>
+                <mxCell id="s7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Give each group one new group_id&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;group · union-find, uuid4&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1040" as="geometry"/>
+                </mxCell>
+                <mxCell id="s8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Copy the merge into split_group&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;group&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Pick one survivor per group&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;_select_one_per_group · random, --group_keep_seed&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1220" as="geometry"/>
+                </mxCell>
+                <mxCell id="s10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;arcSize=20;" value="&lt;b&gt;Mark the survivor keep&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;keep_one_from_group&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1310" as="geometry"/>
+                </mxCell>
+                <mxCell id="s11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;arcSize=20;" value="&lt;b&gt;Mark the others drop · near_duplicate_phash_&amp;lt;threshold&amp;gt;&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;keep_one_from_group&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1400" as="geometry"/>
+                </mxCell>
+                <mxCell id="s12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;" value="&lt;b&gt;Save manifest.csv&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;save_manifest&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1490" as="geometry"/>
+                </mxCell>
+                <mxCell id="s13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=20;" value="&lt;b&gt;Log the run in audits.json&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;@audited: pairs_found, groups_found, images_in_groups&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1580" as="geometry"/>
+                </mxCell>
+                <mxCell id="end" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="&lt;b&gt;Back to dataset_cli&lt;/b&gt;" vertex="1">
+                    <mxGeometry height="60" width="280" x="40" y="1680" as="geometry"/>
+                </mxCell>
+                <mxCell id="how" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;What a perceptual hash is&lt;/b&gt;&lt;br&gt;phash shrinks the image to 32×32 gray, keeps its 8×8 coarsest patterns (DCT) and stores 1 bit per pattern: above or below the median. Images that look alike get hashes that differ in only a few bits, even after resizing or re-saving." vertex="1">
+                    <mxGeometry height="140" width="300" x="380" y="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="chain" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Chaining&lt;/b&gt;&lt;br&gt;Groups follow links: if a~b and b~c, then a and c share a group even if they differ in more bits. The report flags unusually large groups as chaining suspects." vertex="1">
+                    <mxGeometry height="100" width="300" x="380" y="850" as="geometry"/>
+                </mxCell>
+                <mxCell id="same" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Same as group_by_hash&lt;/b&gt; (diagram 07)&lt;br&gt;Rows already review or drop can&#39;t be picked, and every unflagged image in the dataset becomes keep." vertex="1">
+                    <mxGeometry height="110" width="300" x="380" y="1220" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Legend&lt;/b&gt;&lt;br&gt;blue: in memory&lt;br&gt;green: touches disk (resultdir)&lt;br&gt;yellow: decision&lt;br&gt;orange: flag added (action · reason tag)&lt;br&gt;&lt;font color=&#39;#666666&#39;&gt;grey text: the function that does it&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="130" width="260" x="720" y="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="cache" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;The cache&lt;/b&gt;&lt;br&gt;embeddings/phash_hashes.npy holds the hashes and phash_hashes_indices.npy the manifest row of each. It is reused when it covers every row not dropped; rows come back in df order." vertex="1">
+                    <mxGeometry height="130" width="280" x="720" y="294" as="geometry"/>
+                </mxCell>
+                <mxCell id="thr" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;The threshold&lt;/b&gt;&lt;br&gt;Distance ≤ --hamming_threshold counts, so 0 means identical hashes only, and the tag near_duplicate_phash_4 means at most 4 bits apart." vertex="1">
+                    <mxGeometry height="110" width="280" x="720" y="606" as="geometry"/>
+                </mxCell>
+                <mxCell id="e0" edge="1" parent="1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s0" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" edge="1" parent="1" source="s0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s1" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" edge="1" parent="1" source="s1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" edge="1" parent="1" source="s2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="d0" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" edge="1" parent="1" source="d0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="h1" value="no">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" edge="1" parent="1" source="h1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="h2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6" edge="1" parent="1" source="h2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" target="s3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" edge="1" parent="1" source="d0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s3" value="yes">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" edge="1" parent="1" source="s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s4" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" edge="1" parent="1" source="s4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="d1" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s5" value="yes">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" target="s13" value="no">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="355" y="760"/>
+                            <mxPoint x="355" y="1610"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e12" edge="1" parent="1" source="s5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s6" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e13" edge="1" parent="1" source="s6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s7" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e14" edge="1" parent="1" source="s7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s8" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e15" edge="1" parent="1" source="s8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s9" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e16" edge="1" parent="1" source="s9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s10" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e17" edge="1" parent="1" source="s10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s11" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e18" edge="1" parent="1" source="s11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s12" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e19" edge="1" parent="1" source="s12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="s13" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e20" edge="1" parent="1" source="s13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="end" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e21" edge="1" parent="1" source="cache" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;endArrow=none;exitX=0;exitY=0.2;entryX=1;entryY=0.5;" target="s2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e22" edge="1" parent="1" source="thr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;endArrow=none;exitX=0;exitY=0.4;entryX=1;entryY=0.5;" target="s4" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

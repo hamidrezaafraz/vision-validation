@@ -101,18 +101,55 @@ class GroupColumnsMixin:
         caches; their rows can't be matched to the manifest), or a cache that lacks any of the rows.
         A cache holding more rows than needed is fine; only the requested ones are returned.
         """
-        matrix_path, indices_path = self._embedding_paths(model_name)
+        return self._load_cached_rows(*self._embedding_paths(model_name), indices, f"{model_name} embeddings")
+
+    def _load_cached_rows(self, matrix_path: str, indices_path: str, indices, what: str):
+        """
+        Rows of a cached (N, d) matrix for the manifest rows `indices` (default: self.df.index), in that
+        order, or None when they have to be computed: no cache, no row-indices file, a malformed cache
+        (not 2-D, lengths differ, repeated indices) or one that lacks any of the rows.
+        """
         if not os.path.exists(matrix_path):
             return None
         if not os.path.exists(indices_path):
-            logger.warning(f"{matrix_path} has no row indices; recomputing the {model_name} embeddings")
+            logger.warning(f"{matrix_path} has no row indices; recomputing the {what}")
             return None
-        matrix, cached = np.load(matrix_path, mmap_mode="r"), pd.Index(np.load(indices_path))
+        matrix, cached = np.load(matrix_path, mmap_mode="r"), np.load(indices_path)
+        if matrix.ndim != 2 or cached.ndim != 1 or len(matrix) != len(cached) or not pd.Index(cached).is_unique:
+            logger.warning(f"Cached {what} in {matrix_path} are malformed; recomputing")
+            return None
+        cached = pd.Index(cached)
         wanted = pd.Index(self.df.index if indices is None else indices)
-        if len(matrix) != len(cached) or not cached.is_unique or not wanted.isin(cached).all():
-            logger.info(f"Cached {model_name} embeddings don't cover the current rows; recomputing")
+        if not wanted.isin(cached).all():
+            logger.info(f"Cached {what} don't cover the current rows; recomputing")
             return None
         return np.asarray(matrix[cached.get_indexer(wanted)])
+
+    def _perceptual_hash_paths(self, hash_name: str) -> tuple[str, str]:
+        base = os.path.join(self._embeddings_dir, hash_name)
+        return f"{base}_hashes.npy", f"{base}_hashes_indices.npy"
+
+    def save_perceptual_hashes(self, hashes, hash_name: str, indices):
+        """
+        Saves the (N, bits) perceptual hash matrix to <hash>_hashes.npy and, row for row, the manifest index
+        of each hash to <hash>_hashes_indices.npy. Same layout and argument order as save_embeddings.
+        """
+        hashes, indices = np.asarray(hashes), np.asarray(indices)
+        if len(hashes) != len(indices):
+            raise ValueError(f"{len(hashes)} hashes but {len(indices)} indices")
+        hashes_path, indices_path = self._perceptual_hash_paths(hash_name)
+        os.makedirs(self._embeddings_dir, exist_ok=True)
+        np.save(hashes_path, hashes)
+        np.save(indices_path, indices)
+
+    def load_perceptual_hashes(self, hash_name: str, indices=None):
+        """The cached hashes of the rows `indices` (default: the rows not dropped), in that order, or None
+        when they have to be computed (see _load_cached_rows)."""
+        return self._load_cached_rows(*self._perceptual_hash_paths(hash_name), indices, f"{hash_name} hashes")
+
+    def has_perceptual_hash(self, hash_name: str) -> bool:
+        """True when the cache holds a hash for every row not dropped."""
+        return self.load_perceptual_hashes(hash_name) is not None
 
     def _select_one_per_group(self, eligible: pd.Series, group_keep_strategy: str = "random", seed=None) -> pd.Index:
         """
@@ -155,8 +192,6 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
     def has_hash(self):
         return 'hash' in self._manifest.columns and not self._manifest['hash'].isnull().all()
     
-    def has_perceptual_hash(self, hash_name):
-        return f'{hash_name}_perceptual_hash' in self._manifest.columns and not self._manifest[f'{hash_name}_perceptual_hash'].isnull().all()
 
     def __len__(self):
         return len(self.paths)
@@ -232,18 +267,6 @@ class ImageDataset(GroupColumnsMixin, TorchDataset):
                 
                  
     
-    def save_perceptual_hashes(self, indices, hashes, hash_name):
-        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
-        hash_indices_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes_indices.npy")
-        np.save(hashes_path, hashes)
-        np.save(hash_indices_path, indices)
-
-    def load_perceptual_hashes(self, hash_name):
-        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
-        hash_indices_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes_indices.npy")
-        if os.path.exists(hashes_path) and os.path.exists(hash_indices_path):
-            return np.load(hashes_path), np.load(hash_indices_path)
-        return None, None
         
     def keep_one_from_group(self, reason: str, group_keep_strategy="random", seed=None):
         """
@@ -373,15 +396,6 @@ class ImageClassificationDataset(GroupColumnsMixin, TorchDataset):
         n_labels = self._manifest.groupby('split_group')['label'].transform('nunique')
         self._manifest['label_conflict'] = n_labels > 1
             
-    def save_perceptual_hashes(self, hashes, hash_name):
-        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
-        np.save(hashes_path, hashes)
-    
-    def load_perceptual_hashes(self, hash_name):
-        hashes_path = os.path.join(self._embeddings_dir, f"{hash_name}_hashes.npy")
-        if os.path.exists(hashes_path):
-            return np.load(hashes_path)
-        return None
         
     def keep_one_from_group(self, reason: str, group_keep_strategy="random", ignore_label_conflict=False, seed=None):
         """

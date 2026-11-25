@@ -1,0 +1,113 @@
+<mxfile host="65bd71144e">
+    <diagram id="overview" name="0 · overview">
+        <mxGraphModel dx="982" dy="461" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="800" pageHeight="1230" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" parent="1" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;fontSize=13;" value="&lt;b&gt;vision_validation · dataset check before training&lt;/b&gt;&lt;br&gt;&lt;font color=&#39;#666666&#39;&gt;uv run python main.py data --datadir … --resultdir … [flags]. Audits an image folder and records what is wrong with each image. Images are never deleted or changed.&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="70" width="760" x="20" y="10" as="geometry"/>
+                </mxCell>
+                <mxCell id="in" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="&lt;b&gt;Image folder (datadir)&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;unlabeled images, e.g. emotion/Data&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="60" y="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="idx" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Index the files: one manifest row per image&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;ImageDataset&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="60" y="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="rst" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Optionally start over: clear every flag&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;restart  ·  --restart&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="60" y="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="checks" parent="1" style="swimlane;html=1;startSize=34;fillColor=#f9f9f9;strokeColor=#999999;fontStyle=1;collapsible=0;whiteSpace=wrap;rounded=1;arcSize=4;" value="Checks · each one turned on by its own flag, run in this order" vertex="1">
+                    <mxGeometry height="500" width="360" x="30" y="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="c1" parent="checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Check every file opens and has the expected size and format&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;check_decode  ·  --check_decode&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="30" y="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="c2" parent="checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Check image quality: blank, badly exposed, blurry&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;check_photometric  ·  --check_photometric&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="30" y="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="c3" parent="checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Find exact copies: keep one, drop the rest&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;group_by_hash  ·  --group_hash&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="30" y="230" as="geometry"/>
+                </mxCell>
+                <mxCell id="c4" parent="checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Find near copies: keep one, drop the rest&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;group_by_perceptual_hash  ·  --group_perceptual_hash&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="30" y="320" as="geometry"/>
+                </mxCell>
+                <mxCell id="c5" parent="checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Link look-alike images so they stay in one split (nothing dropped)&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;group_by_embeddings  ·  alexnet, facenet&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="70" width="300" x="30" y="410" as="geometry"/>
+                </mxCell>
+                <mxCell id="rep" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=20;" value="&lt;b&gt;Write a read-only report&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;generate_report  ·  --report&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="60" y="930" as="geometry"/>
+                </mxCell>
+                <mxCell id="out" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=10;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b&gt;report/&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;summary (html, md) · review sheet · CSVs · validation_report.json&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="80" width="300" x="60" y="1020" as="geometry"/>
+                </mxCell>
+                <mxCell id="next" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#ffffff;strokeColor=#999999;fontColor=#666666;arcSize=20;" value="&lt;b&gt;Next, planned: train on each cleaning level&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;none → exact → + pHash → + embeddings&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="60" width="300" x="60" y="1140" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Legend&lt;/b&gt;&lt;br&gt;blue: in memory&lt;br&gt;green: touches disk (resultdir)&lt;br&gt;yellow: decision&lt;br&gt;&lt;font color=&#39;#666666&#39;&gt;grey text: the function that does it&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="100" width="240" x="480" y="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="rule" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=12;align=left;verticalAlign=top;spacingLeft=8;spacingRight=6;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;One rule&lt;/b&gt;&lt;br&gt;Every decision is written to the manifest as action (keep / review / drop) plus reason tags. The report reads it but never writes to it." vertex="1">
+                    <mxGeometry height="110" width="240" x="480" y="250" as="geometry"/>
+                </mxCell>
+                <mxCell id="man" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=10;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b&gt;manifest.csv&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;one row per image: path, group ids, action, reason, check results&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="110" width="180" x="470" y="490" as="geometry"/>
+                </mxCell>
+                <mxCell id="aud" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=10;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b&gt;audits.json&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:10px&#39; color=&#39;#666666&#39;&gt;each run: check, settings, counts, time&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="90" width="180" x="610" y="640" as="geometry"/>
+                </mxCell>
+                <mxCell id="e0" edge="1" parent="1" source="in" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="idx" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" edge="1" parent="1" source="idx" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="rst" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" edge="1" parent="1" source="rst" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="checks" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" edge="1" parent="1" source="c1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="c2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" edge="1" parent="1" source="c2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="c3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" edge="1" parent="1" source="c3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="c4" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6" edge="1" parent="1" source="c4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="c5" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" edge="1" parent="1" source="checks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="rep" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" edge="1" parent="1" source="rep" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;" target="out" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" edge="1" parent="1" source="out" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;" target="next" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10" edge="1" parent="1" source="idx" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" target="man" value="create or load">
+                    <mxGeometry relative="1" x="-0.0043" as="geometry">
+                        <mxPoint as="offset"/>
+                        <Array as="points">
+                            <mxPoint x="440" y="230"/>
+                            <mxPoint x="440" y="410"/>
+                            <mxPoint x="560" y="410"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e11" edge="1" parent="1" source="checks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;startArrow=block;startFill=1;exitX=1;exitY=0.18;entryX=0;entryY=0.5;" target="man" value="flag rows">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e12" edge="1" parent="1" source="checks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="aud" value="log each run">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e14" edge="1" parent="1" source="man" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=0.5;exitY=1;entryX=1;entryY=0.3;" target="rep" value="read">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e15" edge="1" parent="1" source="aud" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;dashed=1;exitX=0.75;exitY=1;entryX=1;entryY=0.7;" target="rep" value="read">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

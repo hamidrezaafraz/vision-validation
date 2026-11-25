@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 
 import src.cli.lib as lib
-from src.cli.lib import cached_embeddings
-from src.utils.dataset import ImageDataset
+from src.cli.lib import cached_embeddings, group_by_perceptual_hash, make_perceptual_hashes
+from src.utils.dataset import ImageClassificationDataset, ImageDataset
 
 
 @pytest.fixture
@@ -49,3 +49,52 @@ class TestCachedEmbeddings:
         np.save(dataset._embedding_paths("m")[0], np.zeros((4, 2)))
         assert cached_embeddings(dataset, "m").tolist() == [[0, 0], [1, 1], [2, 2], [3, 3]]
         assert len(fake_model) == 1
+
+
+@pytest.fixture
+def fake_phash(monkeypatch):
+    """get_perceptual_hashes without images: hash of the i-th path given has bits 0..i set, so row i and
+    row j differ in |i - j| bits. Every call is counted."""
+    calls = []
+
+    def fake(paths, hash_name="phash"):
+        paths = list(paths)
+        calls.append(paths)
+        return np.array([[b <= i for b in range(8)] for i in range(len(paths))], dtype=bool)
+    monkeypatch.setattr(lib, "get_perceptual_hashes", fake)
+    return calls
+
+
+@pytest.fixture(params=["unlabeled", "labeled"])
+def any_dataset(request, make_image_folder, tmp_path):
+    root = make_image_folder({"Happy": [(i * 40, 0, 0) for i in range(4)]})
+    cls = ImageDataset if request.param == "unlabeled" else ImageClassificationDataset
+    return cls(root, str(tmp_path / "results"))
+
+
+class TestMakePerceptualHashes:
+    def test_saves_hashes_with_row_indices(self, dataset, fake_phash):
+        H = make_perceptual_hashes(dataset)
+        assert H.shape == (4, 8)
+        assert np.array_equal(dataset.load_perceptual_hashes("phash"), H)
+
+
+class TestGroupByPerceptualHash:
+    def test_uses_the_cache_on_the_second_run(self, dataset, fake_phash):
+        group_by_perceptual_hash(dataset, threshold=0, seed=0)
+        group_by_perceptual_hash(dataset, threshold=0, seed=0)
+        assert len(fake_phash) == 1
+
+    def test_threshold_is_inclusive_and_named_in_the_tag(self, dataset, fake_phash):
+        stats = group_by_perceptual_hash(dataset, threshold=1, seed=0)
+        assert stats["pairs_found"] == 3  # (0,1), (1,2), (2,3): one bit apart each
+        assert stats["groups_found"] == 1  # chained into one group
+        reasons = dataset._manifest["reason"]
+        assert (reasons == "near_duplicate_phash_1").sum() == 3
+
+    def test_works_for_both_dataset_classes(self, any_dataset, fake_phash):
+        """ImageClassificationDataset used to crash: its cache methods had another signature."""
+        stats = group_by_perceptual_hash(any_dataset, threshold=1, seed=0)
+        assert stats["images_in_groups"] == 4
+        group_by_perceptual_hash(any_dataset, threshold=1, seed=0)
+        assert len(fake_phash) == 1

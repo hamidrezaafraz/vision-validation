@@ -54,11 +54,21 @@ class TestHammingPairs:
         chunked = hamming_pairs(hashes, threshold=6, chunk_size=3)
         assert sorted(map(tuple, full)) == sorted(map(tuple, chunked))
 
-    def test_no_pairs_below_threshold(self):
+    def test_no_pairs_above_threshold(self):
         hashes = np.array([[0, 0], [1, 1]], dtype=bool)
         pairs = hamming_pairs(hashes, threshold=1)
         assert isinstance(pairs, np.ndarray)
         assert len(pairs) == 0
+
+    def test_threshold_is_inclusive(self):
+        hashes = np.zeros((2, 64), dtype=bool)
+        hashes[1, :4] = True  # 4 bits apart
+        assert len(hamming_pairs(hashes, threshold=3)) == 0
+        assert hamming_pairs(hashes, threshold=4).tolist() == [[0, 1]]
+
+    def test_zero_means_identical_hashes_only(self):
+        hashes = np.array([[0, 0], [0, 0], [0, 1]], dtype=bool)
+        assert hamming_pairs(hashes, threshold=0).tolist() == [[0, 1]]
 
     def test_empty_input(self):
         pairs = hamming_pairs(np.empty((0, 64), dtype=bool), threshold=5)

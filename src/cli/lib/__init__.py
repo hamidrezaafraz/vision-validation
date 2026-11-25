@@ -57,11 +57,12 @@ def group_by_hash(dataset: ImageDataset | ImageClassificationDataset, group_keep
     return {"groups_found": len(groups), "images_in_groups": sum(len(g) for g in groups)}
         
 def make_perceptual_hashes(dataset: ImageDataset | ImageClassificationDataset, hash_name="phash"):
-    """Hashes all images in the dataset using perceptual hashing and saves the hashes
-    in the manifest's '{hash_name}_perceptual_hash' column as hex strings (one per image)."""
+    """Perceptual-hashes the rows not dropped and caches them in <resultdir>/embeddings/<hash>_hashes.npy,
+    with their manifest indices in <hash>_hashes_indices.npy. Returns the (N, bits) hash matrix."""
     df = dataset.df
     H = get_perceptual_hashes(df['path'], hash_name)
-    dataset.save_perceptual_hashes(H, df.index, hash_name=hash_name)
+    dataset.save_perceptual_hashes(H, hash_name=hash_name, indices=df.index)
+    return H
 
 
 @audited("group_by_perceptual_hash")
@@ -72,21 +73,19 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
     Parameters:
     - dataset: ImageClassificationDataset instance
     - hash_name: str, name of the hash function (default: 'phash')
-    - threshold: int, Hamming distance threshold for considering images as near duplicates
+    - threshold: int, max Hamming distance (inclusive) for two images to count as near duplicates
     - group_keep_strategy: str, how the one kept image per group is picked (see GROUP_KEEP_STRATEGIES)
     - seed: int or None, makes the 'random' strategy reproducible
 
     Returns:
     - dict for the audit log: pairs_found, groups_found, images_in_groups
     """
-    # Compute perceptual hashes for all images in the dataset
-    H, indices = dataset.load_perceptual_hashes(hash_name=hash_name)
-    df = dataset.df
-    if H is None or indices is None or len(H) != len(df) or not np.array_equal(indices, df.index.to_numpy()):
-        H = get_perceptual_hashes(df['path'], hash_name)
-        dataset.save_perceptual_hashes(H, df.index, hash_name=hash_name)
-    
-    # Find pairs of images with Hamming distance less than the threshold
+    # Row i of H is row i of dataset.df: the cache returns rows in that order, or None if it doesn't cover them.
+    H = dataset.load_perceptual_hashes(hash_name=hash_name)
+    if H is None:
+        H = make_perceptual_hashes(dataset, hash_name=hash_name)
+
+    # Pairs of images whose hashes differ in at most `threshold` bits
     pairs = hamming_pairs(H, threshold)
     
     if len(pairs) > 0:

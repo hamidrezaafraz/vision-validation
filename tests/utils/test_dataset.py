@@ -273,7 +273,7 @@ class TestSimilarPairs:
 
 @pytest.fixture(params=["unlabeled", "labeled"])
 def any_dataset(request, make_image_folder, tmp_path):
-    """Both dataset classes over 4 images; the embedding cache methods are shared."""
+    """Both dataset classes over 4 images; the embedding and perceptual-hash cache methods are shared."""
     root = make_image_folder({"Happy": [(i * 40, 0, 0) for i in range(2)], "Sad": [(0, i * 40, 0) for i in range(2)]})
     cls = ImageDataset if request.param == "unlabeled" else ImageClassificationDataset
     return cls(root, str(tmp_path / "results"))
@@ -324,6 +324,56 @@ class TestLoadEmbeddings:
 
     def test_no_cache(self, any_dataset):
         assert any_dataset.load_embeddings("m") is None
+
+
+class TestSavePerceptualHashes:
+    def test_writes_hashes_and_row_indices_to_the_right_files(self, any_dataset):
+        hashes = np.eye(4, 8, dtype=bool)
+        any_dataset.save_perceptual_hashes(hashes, "phash", indices=[0, 1, 2, 3])
+        hashes_path, indices_path = any_dataset._perceptual_hash_paths("phash")
+        assert np.array_equal(np.load(hashes_path), hashes)
+        assert np.load(indices_path).tolist() == [0, 1, 2, 3]
+
+    def test_length_mismatch(self, any_dataset):
+        with pytest.raises(ValueError, match="3 hashes but 2 indices"):
+            any_dataset.save_perceptual_hashes(np.zeros((3, 8), bool), "phash", indices=[0, 1])
+
+
+class TestLoadPerceptualHashes:
+    def hashes(self):
+        return np.arange(4)[:, None] == np.arange(8)[None, :]  # row i has bit i set
+
+    def test_round_trip_for_non_dropped_rows(self, any_dataset):
+        any_dataset.save_perceptual_hashes(self.hashes(), "phash", indices=[0, 1, 2, 3])
+        assert np.array_equal(any_dataset.load_perceptual_hashes("phash"), self.hashes())
+
+    def test_rows_follow_the_manifest(self, any_dataset):
+        any_dataset.save_perceptual_hashes(self.hashes()[[3, 0, 1]], "phash", indices=[3, 0, 1])
+        any_dataset._manifest.loc[2, "action"] = "drop"
+        assert np.array_equal(any_dataset.load_perceptual_hashes("phash"), self.hashes()[[0, 1, 3]])
+
+    def test_cache_missing_a_row_is_not_used(self, any_dataset):
+        any_dataset.save_perceptual_hashes(self.hashes()[:3], "phash", indices=[0, 1, 2])
+        assert any_dataset.load_perceptual_hashes("phash") is None
+
+    def test_swapped_files_are_not_used(self, any_dataset):
+        """What the old callers wrote: row ids in the hashes file, hashes in the indices file."""
+        hashes_path, indices_path = any_dataset._perceptual_hash_paths("phash")
+        np.save(hashes_path, np.arange(4))
+        np.save(indices_path, self.hashes())
+        assert any_dataset.load_perceptual_hashes("phash") is None
+
+    def test_no_cache(self, any_dataset):
+        assert any_dataset.load_perceptual_hashes("phash") is None
+
+
+class TestHasPerceptualHash:
+    def test_true_only_when_every_kept_row_is_cached(self, any_dataset):
+        assert not any_dataset.has_perceptual_hash("phash")
+        any_dataset.save_perceptual_hashes(np.zeros((3, 8), bool), "phash", indices=[0, 1, 2])
+        assert not any_dataset.has_perceptual_hash("phash")
+        any_dataset._manifest.loc[3, "action"] = "drop"
+        assert any_dataset.has_perceptual_hash("phash")
 
 
 class TestRestart:
