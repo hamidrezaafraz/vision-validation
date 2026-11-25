@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import src.cli.lib as lib
-from src.cli.lib import cached_embeddings, group_by_perceptual_hash, make_perceptual_hashes
+from src.cli.lib import cached_embeddings, group_by_perceptual_hash, make_and_save_embeddings, make_perceptual_hashes
 from src.utils.dataset import ImageClassificationDataset, ImageDataset
 
 
@@ -22,6 +22,23 @@ def fake_model(monkeypatch):
         return np.array([[i, i] for i in dataset.df.index], dtype=np.float32)
     monkeypatch.setattr(lib, "make_embeddings", fake)
     return calls
+
+
+class TestMakeAndSaveEmbeddings:
+    def test_recomputes_even_when_the_cache_covers_the_rows(self, dataset, fake_model):
+        cached_embeddings(dataset, "m")
+        emb = make_and_save_embeddings(dataset, "m")
+        assert emb.tolist() == [[0, 0], [1, 1], [2, 2], [3, 3]]
+        assert len(fake_model) == 2
+
+    def test_saves_the_rows_not_dropped(self, dataset, fake_model):
+        cached_embeddings(dataset, "m")  # cache for rows 0-3
+        dataset._manifest.loc[[0, 2], "action"] = "drop"
+        assert make_and_save_embeddings(dataset, "m").tolist() == [[1, 1], [3, 3]]
+        assert fake_model[-1] == [1, 3]
+        matrix_path, indices_path = dataset._embedding_paths("m")
+        assert np.load(indices_path).tolist() == [1, 3]
+        assert np.load(matrix_path).tolist() == [[1, 1], [3, 3]]
 
 
 class TestCachedEmbeddings:

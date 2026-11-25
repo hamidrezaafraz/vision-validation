@@ -102,15 +102,15 @@ def group_by_perceptual_hash(dataset: ImageDataset | ImageClassificationDataset,
 
 def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
     """
-    make general embeddings for the dataset.
+    Computes the embeddings of the rows not dropped (dataset.df.index), in that order. Nothing is saved.
 
     Parameters:
-    - dataset: ImageClassificationDataset instance
+    - dataset: ImageDataset or ImageClassificationDataset instance
     - model_name: str, name of the model to use for embedding
     - batch_size: int, size of the batches to process
 
     Returns:
-    - None
+    - (len(dataset.df), dim) tensor of L2-normalized embeddings
     """
     
     device = get_device()
@@ -122,17 +122,25 @@ def make_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_na
     return emb
 
 
+def make_and_save_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
+    """
+    Always computes the embeddings of the rows not dropped (dataset.df.index), ignoring any cache, and saves
+    them with those row indices, replacing the previous <model>_embeddings.npy and its indices file.
+    """
+    indices = dataset.df.index
+    emb = np.asarray(make_embeddings(dataset, model_name=model_name, batch_size=batch_size))
+    dataset.save_embeddings(emb, model_name=model_name, indices=indices)
+    return emb
+
+
 def cached_embeddings(dataset: ImageDataset | ImageClassificationDataset, model_name="alexnet", batch_size=128):
     """
     The embeddings of the rows not dropped (dataset.df.index), in that order: from the cache when it
-    covers those rows (see load_embeddings), otherwise computed and saved with their row indices.
+    covers those rows (see load_embeddings), otherwise computed and saved (make_and_save_embeddings).
     """
     emb = dataset.load_embeddings(model_name=model_name)
     if emb is None:
-        indices = dataset.df.index
-        emb = make_embeddings(dataset, model_name=model_name, batch_size=batch_size)
-        dataset.save_embeddings(emb, model_name=model_name, indices=indices)
-        emb = np.asarray(emb)
+        emb = make_and_save_embeddings(dataset, model_name=model_name, batch_size=batch_size)
     return emb
 
 @audited("group_by_embeddings")

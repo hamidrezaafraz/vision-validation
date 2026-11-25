@@ -6,7 +6,7 @@ from src.photometric import check_photometric
 from src.utils.dataset import GROUP_KEEP_STRATEGIES, ImageDataset
 from src.utils.images import find_image_paths
 from src.near_duplicates import verify_near_duplicates, verify_near_embeddings
-from src.cli.lib import cached_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
+from src.cli.lib import cached_embeddings, make_and_save_embeddings, make_hashes, group_by_hash, make_perceptual_hashes, group_by_perceptual_hash, group_by_embeddings
 from src.integrity import check_decode
 from src.report import ReportConfig, generate_report
 from src.report.review_sheet import MAX_PER_SECTION
@@ -104,7 +104,7 @@ class DatasetArgs:
     group_perceptual_hash: bool = arg("Group images whose perceptual hashes are within --hamming_threshold bits (hashes them first if needed)", "Near duplicates", default=False)
     hamming_threshold: int = arg("Max Hamming distance (inclusive) for two perceptual hashes to count as near duplicates", "Near duplicates", default=1)
     
-    make_general_embeddings: bool = arg("Compute general embeddings for every image and store the embeddings", "Semantic embeddings", default=False)
+    make_general_embeddings: bool = arg("Compute general embeddings for the images not dropped and save them, replacing any cached ones", "Semantic embeddings", default=False)
     group_embeddings: bool = arg("Group images whose embeddings have cosine similarity >= --embedding_threshold (embeds them first if needed)", "Semantic embeddings", default=False)
     embedding_model_name: str = arg("Model used to compute the embeddings", "Semantic embeddings", default='alexnet')
     embedding_threshold: float = arg("Min cosine similarity for two embeddings to count as near duplicates", "Semantic embeddings", default=0.95)
@@ -217,7 +217,8 @@ def dataset_cli(args: argparse.Namespace):
         if not dataset.has_hash():
             print("Hashing images before computing embeddings...")
             make_hashes(dataset)
-        cached_embeddings(dataset, model_name=data_args.embedding_model_name, batch_size=data_args.embedding_batch_size)
+        # Always recomputes (for dataset.df.index); --group_embeddings then finds a cache that covers the rows.
+        make_and_save_embeddings(dataset, model_name=data_args.embedding_model_name, batch_size=data_args.embedding_batch_size)
     
     if data_args.group_embeddings:
         if not dataset.has_hash():

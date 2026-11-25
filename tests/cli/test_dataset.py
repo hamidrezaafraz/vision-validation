@@ -120,6 +120,25 @@ class TestDatasetCliReport:
             run(delivery, *flags)
 
 
+class TestDatasetCliEmbeddings:
+    @pytest.fixture
+    def calls(self, monkeypatch):
+        """Records which embedding function each flag calls, without loading a model."""
+        import src.cli.dataset as cli
+        calls = []
+        monkeypatch.setattr(cli, "make_and_save_embeddings", lambda ds, model_name, batch_size: calls.append(("make", model_name)))
+        monkeypatch.setattr(cli, "cached_embeddings", lambda ds, model_name, batch_size: calls.append(("cached", model_name)))
+        return calls
+
+    def test_make_general_embeddings_always_recomputes(self, delivery, calls):
+        run(delivery, "--make_general_embeddings", "--embedding_model_name", "alexnet")
+        assert calls == [("make", "alexnet")]
+
+    def test_make_expert_embeddings_still_uses_the_cache(self, delivery, calls):
+        run(delivery, "--make_expert_embeddings")
+        assert calls == [("cached", "facenet-vggface2")]
+
+
 class TestFromNamespace:
     def test_tuple_fields_stay_tuples(self):
         data_args = DatasetArgs.from_namespace(parse(["--expected_modes", "RGB", "L"]))
